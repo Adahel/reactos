@@ -1,5 +1,5 @@
 
-spec2def(authz.dll authz.spec ADD_IMPORTLIB)
+spec2def(authz.dll authz.spec)
 
 list(APPEND SOURCE
     authz.c

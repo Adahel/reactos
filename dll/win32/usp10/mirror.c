@@ -1,9 +1,8 @@
 /* Unicode BiDi mirroring */
-/* generated from http://www.unicode.org/Public/9.0.0/ucd/BidiMirroring.txt */
+/* generated from http://www.unicode.org/Public/10.0.0/ucd/BidiMirroring.txt */
 /* DO NOT EDIT!! */
 
-#include <windef.h>
-#include <winnt.h>
+#include "wine/unicode.h"
 
 const WCHAR DECLSPEC_HIDDEN wine_mirror_map[3292] =
 {

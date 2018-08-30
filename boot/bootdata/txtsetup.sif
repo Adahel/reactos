@@ -24,6 +24,7 @@ nmidebug.sys=,,,,,,x,,,,,,4
 sacdrv.sys=,,,,,,x,,,,,,4
 uniata.sys=,,,,,,x,,,,,,4
 buslogic.sys=,,,,,,x,,,,,,4
+storahci.sys=,,,,,,x,,,,,,4
 blue.sys=,,,,,,x,,,,,,4
 vgafonts.cab=,,,,,,,,,,,,1
 bootvid.dll=,,,,,,,,,,,,2
@@ -51,12 +52,12 @@ usbstor.sys=,,,,,,x,,,,,,4
 kbdhid.sys=,,,,,,,,,,,,4
 kbdclass.sys=,,,,,,x,,,,,,4
 l_intl.nls=,,,,,,,,,,,,2
-ntfs.sys=,,,,,,,,,,,,4
 pci.sys=,,,,,,,,,,,,4
 scsiport.sys=,,,,,,x,,,,,,4
+storport.sys=,,,,,,x,,,,,,4
 fastfat.sys=,,,,,,x,,,,,,4
+btrfs.sys=,,,,,,x,,,,,,4
 ramdisk.sys=,,,,,,x,,,,,,4
-ext2fs.sys=,,,,,,x,,,,,,4
 classpnp.sys=,,,,,,,,,,,,4
 pciide.sys=,,,,,,,,,,,,4
 pciidex.sys=,,,,,,,,,,,,4
@@ -67,10 +68,6 @@ ntdll.dll=,,,,,,,,,,,,2
 wmilib.sys=,,,,,,,,,,,,4
 ksecdd.sys=,,,,,,,,,,,,4
 mountmgr.sys=,,,,,,x,,,,,,4
-btrfs.sys=,,,,,,x,,,,,,4
-reiserfs.sys=,,,,,,x,,,,,,4
-ffs.sys=,,,,,,x,,,,,,4
-udfs.sys=,,,,,,x,,,,,,4
 
 [SystemPartitionFiles]
 
@@ -86,6 +83,7 @@ PCI\CC_0101 = pciide
 PCI\CC_0104 = uniata
 PCI\CC_0105 = uniata
 PCI\CC_0106 = uniata
+;PCI\CC_0106 = storahci
 *PNP0600 = uniata
 ;USB\CLASS_09 = usbhub
 USB\ROOT_HUB = usbhub
@@ -94,12 +92,12 @@ PCI\CC_0C0300 = usbuhci
 PCI\CC_0C0310 = usbohci
 PCI\CC_0C0320 = usbehci
 USB\Class_08&SubClass_06&Prot_50 = usbstor
-HID_DEVICE_SYSTEM_KEYBOARD = kbdhid
+HID_DEVICE_SYSTEM_KEYBOARD = kbdhid,{4D36E96B-E325-11CE-BFC1-08002BE10318}
 USB\COMPOSITE = usbccgp
 GenDisk = disk
 USB\Class_03 = hidusb
 GENERIC_HID_DEVICE = hidusb
-*PNP0303 = i8042prt
+*PNP0303 = i8042prt,{4D36E96B-E325-11CE-BFC1-08002BE10318}
 ROOT\SWENUM = swenum
 
 [BootBusExtenders.Load]
@@ -126,6 +124,7 @@ pciide = pciide.sys
 [SCSI.Load]
 uniata = uniata.sys
 buslogic = buslogic.sys
+storahci = storahci.sys
 disk = disk.sys
 
 [Cabinets]
@@ -383,6 +382,7 @@ Default = "XT-, AT- or extended keyboard (83-105 keys)"
 00000809 = "English (United Kingdom)"
 00000409 = "English (USA)"
 00010409 = "English (USA-Dvorak)"
+0000048F = "Esperanto"
 00000425 = "Estonian"
 0000040B = "Finnish"
 0000080C = "French (Belgium)"
@@ -521,8 +521,10 @@ Default = "XT-, AT- or extended keyboard (83-105 keys)"
 0000044C = kbdinmal.dll
 0000044D = kbdinasa.dll
 00000455 = kbdbur.dll
+0000048F = kbdeo.dll
 
 [HiveInfs.Install]
+AddReg=caroots.inf,AddReg
 AddReg=registry.inf,AddReg
 
 ; EOF

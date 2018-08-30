@@ -58,8 +58,27 @@
  *
  */
 
-#include "precomp.h"
+#include <assert.h>
+#include <stdarg.h>
+#include <string.h>
+#include <stdio.h>
+
+#define COBJMACROS
+#define NONAMELESSUNION
+
+#include "windef.h"
+#include "winbase.h"
+#include "wingdi.h"
+#include "winuser.h"
+#include "winerror.h"
+#include "winnls.h"
+#include "ole2.h"
+#include "wine/debug.h"
+#include "olestd.h"
+
 #include "storage32.h"
+
+#include "compobj_private.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ole);
 
@@ -1869,6 +1888,12 @@ static HWND create_clipbrd_window(void);
  */
 static inline HRESULT get_clipbrd_window(ole_clipbrd *clipbrd, HWND *wnd)
 {
+#ifdef __REACTOS__
+    /* The clipboard window can get destroyed if the  thread that created it dies so we may need to create it again */
+    if (!IsWindow(clipbrd->window))
+        clipbrd->window = create_clipbrd_window();
+#endif
+
     if ( !clipbrd->window )
         clipbrd->window = create_clipbrd_window();
 
@@ -2018,6 +2043,10 @@ static LRESULT CALLBACK clipbrd_wndproc(HWND hwnd, UINT message, WPARAM wparam, 
     {
     case WM_RENDERFORMAT:
     {
+#ifdef __REACTOS__
+    if (clipbrd->cached_enum)
+    {
+#endif
         UINT cf = wparam;
         ole_priv_data_entry *entry;
 
@@ -2026,7 +2055,9 @@ static LRESULT CALLBACK clipbrd_wndproc(HWND hwnd, UINT message, WPARAM wparam, 
 
         if(entry)
             render_format(clipbrd->src_data, &entry->fmtetc);
-
+#ifdef __REACTOS__
+    }
+#endif
         break;
     }
 

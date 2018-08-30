@@ -5,9 +5,6 @@
  * PURPOSE:         Service control manager functions
  * PROGRAMMER:      Emanuele Aliberti
  *                  Eric Kohl
- * UPDATE HISTORY:
- *  19990413 EA created
- *  19990515 EA
  */
 
 /* INCLUDES ******************************************************************/
@@ -22,17 +19,18 @@ handle_t __RPC_USER
 SVCCTL_HANDLEA_bind(SVCCTL_HANDLEA szMachineName)
 {
     handle_t hBinding = NULL;
-    UCHAR *pszStringBinding;
+    RPC_CSTR pszStringBinding;
     RPC_STATUS status;
 
-    TRACE("SVCCTL_HANDLEA_bind() called\n");
+    TRACE("SVCCTL_HANDLEA_bind(%s)\n",
+          debugstr_a(szMachineName));
 
     status = RpcStringBindingComposeA(NULL,
-                                      (UCHAR *)"ncacn_np",
-                                      (UCHAR *)szMachineName,
-                                      (UCHAR *)"\\pipe\\ntsvcs",
+                                      (RPC_CSTR)"ncacn_np",
+                                      (RPC_CSTR)szMachineName,
+                                      (RPC_CSTR)"\\pipe\\ntsvcs",
                                       NULL,
-                                      (UCHAR **)&pszStringBinding);
+                                      &pszStringBinding);
     if (status != RPC_S_OK)
     {
         ERR("RpcStringBindingCompose returned 0x%x\n", status);
@@ -63,7 +61,8 @@ SVCCTL_HANDLEA_unbind(SVCCTL_HANDLEA szMachineName,
 {
     RPC_STATUS status;
 
-    TRACE("SVCCTL_HANDLEA_unbind() called\n");
+    TRACE("SVCCTL_HANDLEA_unbind(%s %p)\n",
+          debugstr_a(szMachineName), hBinding);
 
     status = RpcBindingFree(&hBinding);
     if (status != RPC_S_OK)
@@ -77,10 +76,11 @@ handle_t __RPC_USER
 SVCCTL_HANDLEW_bind(SVCCTL_HANDLEW szMachineName)
 {
     handle_t hBinding = NULL;
-    LPWSTR pszStringBinding;
+    RPC_WSTR pszStringBinding;
     RPC_STATUS status;
 
-    TRACE("SVCCTL_HANDLEW_bind() called\n");
+    TRACE("SVCCTL_HANDLEW_bind(%s)\n",
+          debugstr_w(szMachineName));
 
     status = RpcStringBindingComposeW(NULL,
                                       L"ncacn_np",
@@ -118,7 +118,8 @@ SVCCTL_HANDLEW_unbind(SVCCTL_HANDLEW szMachineName,
 {
     RPC_STATUS status;
 
-    TRACE("SVCCTL_HANDLEW_unbind() called\n");
+    TRACE("SVCCTL_HANDLEW_unbind(%s %p)\n",
+          debugstr_w(szMachineName), hBinding);
 
     status = RpcBindingFree(&hBinding);
     if (status != RPC_S_OK)
@@ -131,6 +132,9 @@ SVCCTL_HANDLEW_unbind(SVCCTL_HANDLEW szMachineName,
 DWORD
 ScmRpcStatusToWinError(RPC_STATUS Status)
 {
+    TRACE("ScmRpcStatusToWinError(%lx)\n",
+          Status);
+
     switch (Status)
     {
         case STATUS_ACCESS_VIOLATION:
@@ -164,7 +168,8 @@ ChangeServiceConfig2A(SC_HANDLE hService,
     SC_RPC_CONFIG_INFOA Info;
     DWORD dwError;
 
-    TRACE("ChangeServiceConfig2A() called\n");
+    TRACE("ChangeServiceConfig2A(%p %lu %p)\n",
+          hService, dwInfoLevel, lpInfo);
 
     if (lpInfo == NULL) return TRUE;
 
@@ -221,7 +226,8 @@ ChangeServiceConfig2W(SC_HANDLE hService,
     SC_RPC_CONFIG_INFOW Info;
     DWORD dwError;
 
-    TRACE("ChangeServiceConfig2W() called\n");
+    TRACE("ChangeServiceConfig2W(%p %lu %p)\n",
+          hService, dwInfoLevel, lpInfo);
 
     if (lpInfo == NULL) return TRUE;
 
@@ -291,7 +297,10 @@ ChangeServiceConfigA(SC_HANDLE hService,
     LPWSTR lpPasswordW = NULL;
     LPBYTE lpEncryptedPassword = NULL;
 
-    TRACE("ChangeServiceConfigA() called\n");
+    TRACE("ChangeServiceConfigA(%p %lu %lu %lu %s %s %p %s %s %s %s)\n",
+          dwServiceType, dwStartType, dwErrorControl, debugstr_a(lpBinaryPathName),
+          debugstr_a(lpLoadOrderGroup), lpdwTagId, debugstr_a(lpDependencies),
+          debugstr_a(lpServiceStartName), debugstr_a(lpPassword), debugstr_a(lpDisplayName));
 
     /* Calculate the Dependencies length*/
     if (lpDependencies != NULL)
@@ -332,7 +341,6 @@ ChangeServiceConfigA(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RChangeServiceConfigA((SC_RPC_HANDLE)hService,
                                         dwServiceType,
                                         dwStartType,
@@ -392,7 +400,10 @@ ChangeServiceConfigW(SC_HANDLE hService,
     DWORD dwPasswordLength = 0;
     LPBYTE lpEncryptedPassword = NULL;
 
-    TRACE("ChangeServiceConfigW() called\n");
+    TRACE("ChangeServiceConfigW(%p %lu %lu %lu %s %s %p %s %s %s %s)\n",
+          dwServiceType, dwStartType, dwErrorControl, debugstr_w(lpBinaryPathName),
+          debugstr_w(lpLoadOrderGroup), lpdwTagId, debugstr_w(lpDependencies),
+          debugstr_w(lpServiceStartName), debugstr_w(lpPassword), debugstr_w(lpDisplayName));
 
     /* Calculate the Dependencies length*/
     if (lpDependencies != NULL)
@@ -417,7 +428,6 @@ ChangeServiceConfigW(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RChangeServiceConfigW((SC_RPC_HANDLE)hService,
                                         dwServiceType,
                                         dwStartType,
@@ -459,7 +469,8 @@ CloseServiceHandle(SC_HANDLE hSCObject)
 {
     DWORD dwError;
 
-    TRACE("CloseServiceHandle() called\n");
+    TRACE("CloseServiceHandle(%p)\n",
+          hSCObject);
 
     if (!hSCObject)
     {
@@ -469,7 +480,6 @@ CloseServiceHandle(SC_HANDLE hSCObject)
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RCloseServiceHandle((LPSC_RPC_HANDLE)&hSCObject);
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)
@@ -503,12 +513,11 @@ ControlService(SC_HANDLE hService,
 {
     DWORD dwError;
 
-    TRACE("ControlService(%x, %x, %p)\n",
-           hService, dwControl, lpServiceStatus);
+    TRACE("ControlService(%p %lu %p)\n",
+          hService, dwControl, lpServiceStatus);
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RControlService((SC_RPC_HANDLE)hService,
                                   dwControl,
                                   lpServiceStatus);
@@ -543,8 +552,8 @@ ControlServiceEx(IN SC_HANDLE hService,
                  IN DWORD dwInfoLevel,
                  IN OUT PVOID pControlParams)
 {
-    FIXME("ControlServiceEx(0x%p, 0x%x, 0x%x, 0x%p) UNIMPLEMENTED!\n",
-            hService, dwControl, dwInfoLevel, pControlParams);
+    FIXME("ControlServiceEx(%p %lu %lu %p)\n",
+          hService, dwControl, dwInfoLevel, pControlParams);
     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
     return FALSE;
 }
@@ -579,9 +588,11 @@ CreateServiceA(SC_HANDLE hSCManager,
     LPWSTR lpPasswordW = NULL;
     LPBYTE lpEncryptedPassword = NULL;
 
-    TRACE("CreateServiceA() called\n");
-    TRACE("%p %s %s\n", hSCManager,
-          lpServiceName, lpDisplayName);
+    TRACE("CreateServiceA(%p %s %s %lx %lu %lu %lu %s %s %p %s %s %s)\n",
+          hSCManager, debugstr_a(lpServiceName), debugstr_a(lpDisplayName),
+          dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl,
+          debugstr_a(lpBinaryPathName), debugstr_a(lpLoadOrderGroup), lpdwTagId,
+          debugstr_a(lpDependencies), debugstr_a(lpServiceStartName), debugstr_a(lpPassword));
 
     if (!hSCManager)
     {
@@ -628,7 +639,6 @@ CreateServiceA(SC_HANDLE hSCManager,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RCreateServiceA((SC_RPC_HANDLE)hSCManager,
                                   (LPSTR)lpServiceName,
                                   (LPSTR)lpDisplayName,
@@ -694,9 +704,11 @@ CreateServiceW(SC_HANDLE hSCManager,
     DWORD dwPasswordLength = 0;
     LPBYTE lpEncryptedPassword = NULL;
 
-    TRACE("CreateServiceW() called\n");
-    TRACE("%p %S %S\n", hSCManager,
-          lpServiceName, lpDisplayName);
+    TRACE("CreateServiceW(%p %s %s %lx %lu %lu %lu %s %s %p %s %s %s)\n",
+          hSCManager, debugstr_w(lpServiceName), debugstr_w(lpDisplayName),
+          dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl,
+          debugstr_w(lpBinaryPathName), debugstr_w(lpLoadOrderGroup), lpdwTagId,
+          debugstr_w(lpDependencies), debugstr_w(lpServiceStartName), debugstr_w(lpPassword));
 
     if (!hSCManager)
     {
@@ -727,7 +739,6 @@ CreateServiceW(SC_HANDLE hSCManager,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RCreateServiceW((SC_RPC_HANDLE)hSCManager,
                                   lpServiceName,
                                   lpDisplayName,
@@ -772,11 +783,11 @@ DeleteService(SC_HANDLE hService)
 {
     DWORD dwError;
 
-    TRACE("DeleteService(%x)\n", hService);
+    TRACE("DeleteService(%p)\n",
+          hService);
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RDeleteService((SC_RPC_HANDLE)hService);
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)
@@ -815,7 +826,9 @@ EnumDependentServicesA(SC_HANDLE hService,
     DWORD dwError;
     DWORD dwCount;
 
-    TRACE("EnumDependentServicesA() called\n");
+    TRACE("EnumDependentServicesA(%p %lu %p %lu %p %p)\n",
+          hService, dwServiceState, lpServices, cbBufSize,
+          pcbBytesNeeded, lpServicesReturned);
 
     if (lpServices == NULL || cbBufSize < sizeof(ENUM_SERVICE_STATUSA))
     {
@@ -891,7 +904,9 @@ EnumDependentServicesW(SC_HANDLE hService,
     DWORD dwError;
     DWORD dwCount;
 
-    TRACE("EnumDependentServicesW() called\n");
+    TRACE("EnumDependentServicesW(%p %lu %p %lu %p %p)\n",
+          hService, dwServiceState, lpServices, cbBufSize,
+          pcbBytesNeeded, lpServicesReturned);
 
     if (lpServices == NULL || cbBufSize < sizeof(ENUM_SERVICE_STATUSW))
     {
@@ -970,7 +985,10 @@ EnumServiceGroupW(SC_HANDLE hSCManager,
     DWORD dwError;
     DWORD dwCount;
 
-    TRACE("EnumServiceGroupW() called\n");
+    TRACE("EnumServiceGroupW(%p %lu %lu %p %lu %p %p %p %s)\n",
+          hSCManager, dwServiceType, dwServiceState, lpServices,
+          cbBufSize, pcbBytesNeeded, lpServicesReturned,
+          lpResumeHandle, debugstr_w(lpGroup));
 
     if (!hSCManager)
     {
@@ -1077,7 +1095,9 @@ EnumServicesStatusA(SC_HANDLE hSCManager,
     DWORD dwError;
     DWORD dwCount;
 
-    TRACE("EnumServicesStatusA() called\n");
+    TRACE("EnumServicesStatusA(%p %lu %lu %p %lu %p %p %p)\n",
+          hSCManager, dwServiceType, dwServiceState, lpServices,
+          cbBufSize, pcbBytesNeeded, lpServicesReturned, lpResumeHandle);
 
     if (!hSCManager)
     {
@@ -1169,7 +1189,9 @@ EnumServicesStatusW(SC_HANDLE hSCManager,
     DWORD dwError;
     DWORD dwCount;
 
-    TRACE("EnumServicesStatusW() called\n");
+    TRACE("EnumServicesStatusW(%p %lu %lu %p %lu %p %p %p)\n",
+          hSCManager, dwServiceType, dwServiceState, lpServices,
+          cbBufSize, pcbBytesNeeded, lpServicesReturned, lpResumeHandle);
 
     if (!hSCManager)
     {
@@ -1263,7 +1285,10 @@ EnumServicesStatusExA(SC_HANDLE hSCManager,
     DWORD dwError;
     DWORD dwCount;
 
-    TRACE("EnumServicesStatusExA() called\n");
+    TRACE("EnumServicesStatusExA(%p %lu %lu %p %lu %p %p %p %s)\n",
+          hSCManager, dwServiceType, dwServiceState, lpServices,
+          cbBufSize, pcbBytesNeeded, lpServicesReturned, lpResumeHandle,
+          debugstr_a(pszGroupName));
 
     if (InfoLevel != SC_ENUM_PROCESS_INFO)
     {
@@ -1368,7 +1393,10 @@ EnumServicesStatusExW(SC_HANDLE hSCManager,
     DWORD dwError;
     DWORD dwCount;
 
-    TRACE("EnumServicesStatusExW() called\n");
+    TRACE("EnumServicesStatusExW(%p %lu %lu %p %lu %p %p %p %s)\n",
+          hSCManager, dwServiceType, dwServiceState, lpServices,
+          cbBufSize, pcbBytesNeeded, lpServicesReturned, lpResumeHandle,
+          debugstr_w(pszGroupName));
 
     if (InfoLevel != SC_ENUM_PROCESS_INFO)
     {
@@ -1465,9 +1493,8 @@ GetServiceDisplayNameA(SC_HANDLE hSCManager,
     LPSTR lpNameBuffer;
     CHAR szEmptyName[] = "";
 
-    TRACE("GetServiceDisplayNameA() called\n");
-    TRACE("%p %s %p %p\n", hSCManager,
-          debugstr_a(lpServiceName), lpDisplayName, lpcchBuffer);
+    TRACE("GetServiceDisplayNameA(%p %s %p %p)\n",
+          hSCManager, debugstr_a(lpServiceName), lpDisplayName, lpcchBuffer);
 
     if (!hSCManager)
     {
@@ -1494,7 +1521,6 @@ GetServiceDisplayNameA(SC_HANDLE hSCManager,
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)
     {
-        /* HACK: because of a problem with rpcrt4, rpcserver is hacked to return 6 for ERROR_SERVICE_DOES_NOT_EXIST */
         dwError = ScmRpcStatusToWinError(RpcExceptionCode());
     }
     RpcEndExcept;
@@ -1525,7 +1551,8 @@ GetServiceDisplayNameW(SC_HANDLE hSCManager,
     LPWSTR lpNameBuffer;
     WCHAR szEmptyName[] = L"";
 
-    TRACE("GetServiceDisplayNameW() called\n");
+    TRACE("GetServiceDisplayNameW(%p %s %p %p)\n",
+          hSCManager, debugstr_w(lpServiceName), lpDisplayName, lpcchBuffer);
 
     if (!hSCManager)
     {
@@ -1582,7 +1609,8 @@ GetServiceKeyNameA(SC_HANDLE hSCManager,
     LPSTR lpNameBuffer;
     CHAR szEmptyName[] = "";
 
-    TRACE("GetServiceKeyNameA() called\n");
+    TRACE("GetServiceKeyNameA(%p %s %p %p)\n",
+          hSCManager, debugstr_a(lpDisplayName), lpServiceName, lpcchBuffer);
 
     if (!hSCManager)
     {
@@ -1609,6 +1637,7 @@ GetServiceKeyNameA(SC_HANDLE hSCManager,
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)
     {
+        /* HACK: because of a problem with rpcrt4, rpcserver is hacked to return 6 for ERROR_SERVICE_DOES_NOT_EXIST */
         dwError = ScmRpcStatusToWinError(RpcExceptionCode());
     }
     RpcEndExcept;
@@ -1639,7 +1668,8 @@ GetServiceKeyNameW(SC_HANDLE hSCManager,
     LPWSTR lpNameBuffer;
     WCHAR szEmptyName[] = L"";
 
-    TRACE("GetServiceKeyNameW() called\n");
+    TRACE("GetServiceKeyNameW(%p %s %p %p)\n",
+          hSCManager, debugstr_w(lpDisplayName), lpServiceName, lpcchBuffer);
 
     if (!hSCManager)
     {
@@ -1693,7 +1723,8 @@ I_ScGetCurrentGroupStateW(SC_HANDLE hSCManager,
 {
     DWORD dwError;
 
-    TRACE("I_ScGetCurrentGroupStateW() called\n");
+    TRACE("I_ScGetCurrentGroupStateW(%p %s %p)\n",
+          hSCManager, debugstr_w(pszGroupName), pdwGroupState);
 
     RpcTryExcept
     {
@@ -1728,11 +1759,11 @@ LockServiceDatabase(SC_HANDLE hSCManager)
     SC_LOCK hLock;
     DWORD dwError;
 
-    TRACE("LockServiceDatabase(%x)\n", hSCManager);
+    TRACE("LockServiceDatabase(%p)\n",
+          hSCManager);
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RLockServiceDatabase((SC_RPC_HANDLE)hSCManager,
                                        (SC_RPC_LOCK *)&hLock);
     }
@@ -1760,17 +1791,19 @@ WaitForSCManager(VOID)
 {
     HANDLE hEvent;
 
-    TRACE("WaitForSCManager() called\n");
+    TRACE("WaitForSCManager()\n");
 
     /* Try to open the existing event */
     hEvent = OpenEventW(SYNCHRONIZE, FALSE, SCM_START_EVENT);
     if (hEvent == NULL)
     {
-        if (GetLastError() != ERROR_FILE_NOT_FOUND) return;
+        if (GetLastError() != ERROR_FILE_NOT_FOUND)
+            return;
 
         /* Try to create a new event */
         hEvent = CreateEventW(NULL, TRUE, FALSE, SCM_START_EVENT);
-        if (hEvent == NULL) return;
+        if (hEvent == NULL)
+            return;
     }
 
     /* Wait for 3 minutes */
@@ -1794,14 +1827,13 @@ OpenSCManagerA(LPCSTR lpMachineName,
     SC_HANDLE hScm = NULL;
     DWORD dwError;
 
-    TRACE("OpenSCManagerA(%s, %s, %lx)\n",
-           lpMachineName, lpDatabaseName, dwDesiredAccess);
+    TRACE("OpenSCManagerA(%s %s %lx)\n",
+          debugstr_a(lpMachineName), debugstr_a(lpDatabaseName), dwDesiredAccess);
 
     WaitForSCManager();
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = ROpenSCManagerA((LPSTR)lpMachineName,
                                   (LPSTR)lpDatabaseName,
                                   dwDesiredAccess,
@@ -1839,14 +1871,13 @@ OpenSCManagerW(LPCWSTR lpMachineName,
     SC_HANDLE hScm = NULL;
     DWORD dwError;
 
-    TRACE("OpenSCManagerW(%S, %S, %lx)\n",
-           lpMachineName, lpDatabaseName, dwDesiredAccess);
+    TRACE("OpenSCManagerW(%s %s %lx)\n",
+          debugstr_w(lpMachineName), debugstr_w(lpDatabaseName), dwDesiredAccess);
 
     WaitForSCManager();
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = ROpenSCManagerW((LPWSTR)lpMachineName,
                                   (LPWSTR)lpDatabaseName,
                                   dwDesiredAccess,
@@ -1884,8 +1915,8 @@ OpenServiceA(SC_HANDLE hSCManager,
     SC_HANDLE hService = NULL;
     DWORD dwError;
 
-    TRACE("OpenServiceA(%p, %s, %lx)\n",
-           hSCManager, lpServiceName, dwDesiredAccess);
+    TRACE("OpenServiceA(%p %s %lx)\n",
+           hSCManager, debugstr_a(lpServiceName), dwDesiredAccess);
 
     if (!hSCManager)
     {
@@ -1895,7 +1926,6 @@ OpenServiceA(SC_HANDLE hSCManager,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = ROpenServiceA((SC_RPC_HANDLE)hSCManager,
                                 (LPSTR)lpServiceName,
                                 dwDesiredAccess,
@@ -1933,8 +1963,8 @@ OpenServiceW(SC_HANDLE hSCManager,
     SC_HANDLE hService = NULL;
     DWORD dwError;
 
-    TRACE("OpenServiceW(%p, %S, %lx)\n",
-           hSCManager, lpServiceName, dwDesiredAccess);
+    TRACE("OpenServiceW(%p %s %lx)\n",
+           hSCManager, debugstr_w(lpServiceName), dwDesiredAccess);
 
     if (!hSCManager)
     {
@@ -1944,7 +1974,6 @@ OpenServiceW(SC_HANDLE hSCManager,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = ROpenServiceW((SC_RPC_HANDLE)hSCManager,
                                 (LPWSTR)lpServiceName,
                                 dwDesiredAccess,
@@ -1985,7 +2014,7 @@ QueryServiceConfigA(SC_HANDLE hService,
     DWORD dwBufferSize;
     DWORD dwError;
 
-    TRACE("QueryServiceConfigA(%p, %p, %lu, %p)\n",
+    TRACE("QueryServiceConfigA(%p %p %lu %p)\n",
            hService, lpServiceConfig, cbBufSize, pcbBytesNeeded);
 
     if (lpServiceConfig == NULL ||
@@ -2002,7 +2031,6 @@ QueryServiceConfigA(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceConfigA((SC_RPC_HANDLE)hService,
                                        (LPBYTE)lpConfigPtr,
                                        dwBufferSize,
@@ -2069,7 +2097,7 @@ QueryServiceConfigW(SC_HANDLE hService,
     DWORD dwBufferSize;
     DWORD dwError;
 
-    TRACE("QueryServiceConfigW(%p, %p, %lu, %p)\n",
+    TRACE("QueryServiceConfigW(%p %p %lu %p)\n",
            hService, lpServiceConfig, cbBufSize, pcbBytesNeeded);
 
     if (lpServiceConfig == NULL ||
@@ -2086,7 +2114,6 @@ QueryServiceConfigW(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceConfigW((SC_RPC_HANDLE)hService,
                                        (LPBYTE)lpConfigPtr,
                                        dwBufferSize,
@@ -2156,7 +2183,7 @@ QueryServiceConfig2A(SC_HANDLE hService,
     DWORD dwBufferSize;
     DWORD dwError;
 
-    TRACE("QueryServiceConfig2A(hService %p, dwInfoLevel %lu, lpBuffer %p, cbBufSize %lu, pcbBytesNeeded %p)\n",
+    TRACE("QueryServiceConfig2A(%p %lu %p %lu %p)\n",
           hService, dwInfoLevel, lpBuffer, cbBufSize, pcbBytesNeeded);
 
     lpTempBuffer = lpBuffer;
@@ -2190,7 +2217,6 @@ QueryServiceConfig2A(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceConfig2A((SC_RPC_HANDLE)hService,
                                         dwInfoLevel,
                                         lpTempBuffer,
@@ -2210,7 +2236,7 @@ QueryServiceConfig2A(SC_HANDLE hService,
         return FALSE;
     }
 
-    if (bUseTempBuffer == TRUE)
+    if (bUseTempBuffer != FALSE)
     {
         TRACE("RQueryServiceConfig2A() returns ERROR_INSUFFICIENT_BUFFER\n");
         *pcbBytesNeeded = dwBufferSize;
@@ -2274,8 +2300,8 @@ QueryServiceConfig2W(SC_HANDLE hService,
     DWORD dwBufferSize;
     DWORD dwError;
 
-    TRACE("QueryServiceConfig2W(%p, %lu, %p, %lu, %p)\n",
-           hService, dwInfoLevel, lpBuffer, cbBufSize, pcbBytesNeeded);
+    TRACE("QueryServiceConfig2W(%p %lu %p %lu %p)\n",
+          hService, dwInfoLevel, lpBuffer, cbBufSize, pcbBytesNeeded);
 
     lpTempBuffer = lpBuffer;
     dwBufferSize = cbBufSize;
@@ -2308,7 +2334,6 @@ QueryServiceConfig2W(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceConfig2W((SC_RPC_HANDLE)hService,
                                         dwInfoLevel,
                                         lpTempBuffer,
@@ -2328,7 +2353,7 @@ QueryServiceConfig2W(SC_HANDLE hService,
         return FALSE;
     }
 
-    if (bUseTempBuffer == TRUE)
+    if (bUseTempBuffer != FALSE)
     {
         TRACE("RQueryServiceConfig2W() returns ERROR_INSUFFICIENT_BUFFER\n");
         *pcbBytesNeeded = dwBufferSize;
@@ -2389,7 +2414,8 @@ QueryServiceLockStatusA(SC_HANDLE hSCManager,
     DWORD dwBufferSize;
     DWORD dwError;
 
-    TRACE("QueryServiceLockStatusA() called\n");
+    TRACE("QueryServiceLockStatusA(%p %p %lu %p)\n",
+          hSCManager, lpLockStatus, cbBufSize, pcbBytesNeeded);
 
     if (lpLockStatus == NULL || cbBufSize < sizeof(QUERY_SERVICE_LOCK_STATUSA))
     {
@@ -2404,7 +2430,6 @@ QueryServiceLockStatusA(SC_HANDLE hSCManager,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceLockStatusA((SC_RPC_HANDLE)hSCManager,
                                            (LPBYTE)lpStatusPtr,
                                            dwBufferSize,
@@ -2451,7 +2476,8 @@ QueryServiceLockStatusW(SC_HANDLE hSCManager,
     DWORD dwBufferSize;
     DWORD dwError;
 
-    TRACE("QueryServiceLockStatusW() called\n");
+    TRACE("QueryServiceLockStatusW(%p %p %lu %p)\n",
+          hSCManager, lpLockStatus, cbBufSize, pcbBytesNeeded);
 
     if (lpLockStatus == NULL || cbBufSize < sizeof(QUERY_SERVICE_LOCK_STATUSW))
     {
@@ -2466,7 +2492,6 @@ QueryServiceLockStatusW(SC_HANDLE hSCManager,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceLockStatusW((SC_RPC_HANDLE)hSCManager,
                                            (LPBYTE)lpStatusPtr,
                                            dwBufferSize,
@@ -2511,12 +2536,11 @@ QueryServiceObjectSecurity(SC_HANDLE hService,
 {
     DWORD dwError;
 
-    TRACE("QueryServiceObjectSecurity(%p, %lu, %p)\n",
+    TRACE("QueryServiceObjectSecurity(%p %lu %p)\n",
            hService, dwSecurityInformation, lpSecurityDescriptor);
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceObjectSecurity((SC_RPC_HANDLE)hService,
                                               dwSecurityInformation,
                                               (LPBYTE)lpSecurityDescriptor,
@@ -2539,6 +2563,7 @@ QueryServiceObjectSecurity(SC_HANDLE hService,
     return TRUE;
 }
 
+
 /**********************************************************************
  *  SetServiceObjectSecurity
  *
@@ -2553,6 +2578,9 @@ SetServiceObjectSecurity(SC_HANDLE hService,
     ULONG Length;
     NTSTATUS Status;
     DWORD dwError;
+
+    TRACE("SetServiceObjectSecurity(%p %lu %p)\n",
+          hService, dwSecurityInformation, lpSecurityDescriptor);
 
     Length = 0;
     Status = RtlMakeSelfRelativeSD(lpSecurityDescriptor,
@@ -2583,7 +2611,6 @@ SetServiceObjectSecurity(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RSetServiceObjectSecurity((SC_RPC_HANDLE)hService,
                                             dwSecurityInformation,
                                             (LPBYTE)SelfRelativeSD,
@@ -2619,8 +2646,8 @@ QueryServiceStatus(SC_HANDLE hService,
 {
     DWORD dwError;
 
-    TRACE("QueryServiceStatus(%p, %p)\n",
-           hService, lpServiceStatus);
+    TRACE("QueryServiceStatus(%p %p)\n",
+          hService, lpServiceStatus);
 
     if (!hService)
     {
@@ -2630,7 +2657,6 @@ QueryServiceStatus(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceStatus((SC_RPC_HANDLE)hService,
                                       lpServiceStatus);
     }
@@ -2665,7 +2691,8 @@ QueryServiceStatusEx(SC_HANDLE hService,
 {
     DWORD dwError;
 
-    TRACE("QueryServiceStatusEx() called\n");
+    TRACE("QueryServiceStatusEx(%p %lu %p %lu %p)\n",
+          hService, InfoLevel, lpBuffer, cbBufSize, pcbBytesNeeded);
 
     if (InfoLevel != SC_STATUS_PROCESS_INFO)
     {
@@ -2682,7 +2709,6 @@ QueryServiceStatusEx(SC_HANDLE hService,
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RQueryServiceStatusEx((SC_RPC_HANDLE)hService,
                                         InfoLevel,
                                         lpBuffer,
@@ -2717,6 +2743,9 @@ StartServiceA(SC_HANDLE hService,
               LPCSTR *lpServiceArgVectors)
 {
     DWORD dwError;
+
+    TRACE("StartServiceA(%p %lu %p)\n",
+          hService, dwNumServiceArgs, lpServiceArgVectors);
 
     RpcTryExcept
     {
@@ -2753,6 +2782,9 @@ StartServiceW(SC_HANDLE hService,
 {
     DWORD dwError;
 
+    TRACE("StartServiceW(%p %lu %p)\n",
+          hService, dwNumServiceArgs, lpServiceArgVectors);
+
     RpcTryExcept
     {
         dwError = RStartServiceW((SC_RPC_HANDLE)hService,
@@ -2786,11 +2818,11 @@ UnlockServiceDatabase(SC_LOCK ScLock)
 {
     DWORD dwError;
 
-    TRACE("UnlockServiceDatabase(%x)\n", ScLock);
+    TRACE("UnlockServiceDatabase(%x)\n",
+          ScLock);
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RUnlockServiceDatabase((LPSC_RPC_LOCK)&ScLock);
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)
@@ -2823,11 +2855,11 @@ NotifyBootConfigStatus(BOOL BootAcceptable)
 {
     DWORD dwError;
 
-    TRACE("NotifyBootConfigStatus()\n");
+    TRACE("NotifyBootConfigStatus(%u)\n",
+          BootAcceptable);
 
     RpcTryExcept
     {
-        /* Call to services.exe using RPC */
         dwError = RNotifyBootConfigStatus(NULL,
                                           BootAcceptable);
     }

@@ -150,42 +150,48 @@ static MUI_ENTRY plPLIntroPageEntries[] =
     {
         6,
         8,
-        "Instalator ReactOS wci¥¾ jest we wczesnej fazie rozwoju. Nadal nie",
-        TEXT_STYLE_NORMAL
+        "Stan rozwoju systemu ReactOS",
+        TEXT_STYLE_HIGHLIGHT
     },
     {
         6,
-        9,
-        "obsˆuguje wszystkich funkcji, niezb©dnych dla programu instalacyjnego.",
+        11,
+        "System ReactOS jest w fazie Alpha, co oznacza, ¾e jest niekompletny",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         12,
-        "Najwa¾niejsze ograniczenia:",
+        "i wci¥¾ intensywnie rozwijany. Zaleca si© u¾ywania systemu wyˆ¥cznie",
         TEXT_STYLE_NORMAL
     },
     {
-        8,
+        6,
         13,
-        "- Instalator obsˆuguje jedynie system plik¢w FAT.",
+        "w celach ewauluacji i testowania, nie jako system codziennego u¾ytku.",
+        TEXT_STYLE_NORMAL
+    },
+    {
+        6,
+        15,
+        "Wykonaj kopi© zapasow¥ danych lub testuj na dodatkowym komputerze,",
+        TEXT_STYLE_NORMAL
+    },
+    {
+        6,
+        16,
+        "je˜li pr¢bujesz uruchomi† system ReactOS poza maszyn¥ wirtualn¥.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
-        14,
-        "- Brakuje sprawdzenia poprawno˜ci systemu plik¢w.",
-        TEXT_STYLE_NORMAL
-    },
-    {
-        8,
-        23,
+        19,
         "\x07  Naci˜nij ENTER, aby zainstalowa† system ReactOS.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
-        25,
+        21,
         "\x07  Naci˜nij F3, aby wyj˜† bez instalacji systemu ReactOS.",
         TEXT_STYLE_NORMAL
     },
@@ -193,7 +199,7 @@ static MUI_ENTRY plPLIntroPageEntries[] =
         0,
         0,
         "ENTER = Kontynuacja   F3 = Wyj˜cie",
-        TEXT_TYPE_STATUS| TEXT_PADDING_BIG
+        TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
         0,
@@ -565,7 +571,7 @@ static MUI_ENTRY plPLFlushPageEntries[] =
     {
         0,
         0,
-        "Czyszczenie pami©ci Cache",
+        "Czyszczenie pami©ci podr©cznej",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -599,7 +605,7 @@ static MUI_ENTRY plPLQuitPageEntries[] =
     {
         10,
         9,
-        "w nap©dach optycznych - ¾adnych CD-ROM¢w.",
+        "w nap©dach optycznych - ¾adnych pˆyt.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -696,7 +702,7 @@ static MUI_ENTRY plPLSuccessPageEntries[] =
     {
         10,
         9,
-        "w nap©dach optycznych - ¾adnych CD-ROM¢w.",
+        "w nap©dach optycznych - ¾adnych pˆyt.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -730,13 +736,13 @@ static MUI_ENTRY plPLBootPageEntries[] =
     {
         6,
         8,
-        "Instalator ReactOS nie mo¾e wgra† bootloadera na tw¢j",
+        "Instalator ReactOS nie mo¾e zainstalowa† mened¾era",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         9,
-        "dysk twardy",
+        "rozruchu na twoim dysku twardym",
         TEXT_STYLE_NORMAL
     },
     {
@@ -819,7 +825,7 @@ static MUI_ENTRY plPLSelectPartitionEntries[] =
     {
         8,
         21,
-        "\x07  Naci˜nij D, by skasowa† istniej¥c¥ partycj©.",
+        "\x07  Naci˜nij D, by usun¥† istniej¥c¥ partycj©.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -847,79 +853,79 @@ static MUI_ENTRY plPLConfirmDeleteSystemPartitionEntries[] =
     {
         6,
         8,
-        "You have chosen to delete the system partition.",
+        "Za¾¥dano usuni©cia partycji systemowej",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnostic programs, hardware configuration",
+        "Partycje systemowe mog¥ zawiera† programy diagnostyczne, konfiguruj¥ce",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         11,
-        "programs, programs to start an operating system (like ReactOS) or other",
+        "urz¥dzenia, programy uruchamiaj¥ce systemy operacyjne (na przykˆad",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         12,
-        "programs provided by the hardware manufacturer.",
+        "ReactOS) i inne programy dostarczane przez producent¢w.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         14,
-        "Delete a system partition only when you are sure that there are no such",
+        "Partycj© systemow¥ mo¾esz usun¥† tylko wtedy, gdy masz pewno˜†, ¾e nie",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         15,
-        "programs on the partition, or when you are sure you want to delete them.",
+        "zawiera ona takich program¢w albo gdy chcesz je usun¥†. Usuni©cie",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         16,
-        "When you delete the partition, you might not be able to boot the",
+        "partycji systemowej mo¾e uniemo¾liwi† uruchomienie komputera z dysku",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         17,
-        "computer from the harddisk until you finished the ReactOS Setup.",
+        "twardego do czasu zakoäczenia instalacji systemu ReactOS.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         20,
-        "\x07  Press ENTER to delete the system partition. You will be asked",
+        "\x07  Naci˜nij ENTER, aby usun¥† t© partycj©. Instalator wy˜wietli monit",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         21,
-        "   to confirm the deletion of the partition again later.",
+        "   o potwierdzenie, przed usuni©ciem tej partycji.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         24,
-        "\x07  Press ESC to return to the previous page. The partition will",
+        "\x07  Naci˜nij ESC, aby powr¢ci† do poprzedniego ekranu",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         25,
-        "   not be deleted.",
+        "   nie usuwaj¥c partycji.",
         TEXT_STYLE_NORMAL
     },
     {
         0,
         0,
-        "ENTER=Continue  ESC=Cancel",
+        "ENTER = Kontynuacja  ESC = Anulowanie",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -975,7 +981,7 @@ static MUI_ENTRY plPLInstallDirectoryEntries[] =
     {
         6,
         8,
-        "Instalator przegra pliki systemu na wybran¥ partycj©. Wybierz",
+        "Instalator skopiuje pliki systemu na wybran¥ partycj©. Wybierz",
         TEXT_STYLE_NORMAL
     },
     {
@@ -987,7 +993,7 @@ static MUI_ENTRY plPLInstallDirectoryEntries[] =
     {
         6,
         14,
-        "Aby zmieni† domy˜lny katalog, u¾yj klawisza BACKSPACE, by skasowa†",
+        "Aby zmieni† domy˜lny katalog, u¾yj klawisza BACKSPACE, by usun¥†",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1067,31 +1073,31 @@ static MUI_ENTRY plPLBootLoaderEntries[] =
     {
         6,
         8,
-        "Instalator musi teraz wgra† bootloader",
+        "Instalator musi teraz zainstalowa† mened¾er rozruchu",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         12,
-        "Wgraj bootloader na dysk twardy (MBR i VBR).",
+        "Instaluj mened¾er rozruchu na dysku twardym (MBR i VBR).",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         13,
-        "Wgraj bootloader na dysk twardy (tylko VBR).",
+        "Instaluj mened¾er rozruchu na dysku twardym (tylko VBR).",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         14,
-        "Wgraj bootloader na dyskietk©.",
+        "Instaluj mened¾er rozruchu na dyskietce.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         15,
-        "Pomiä wgrywanie bootloadera.",
+        "Pomiä instalacj© mened¾era rozruchu.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1300,19 +1306,19 @@ static MUI_ENTRY plPLDeletePartitionEntries[] =
     {
         6,
         8,
-        "Chcesz skasowa† wybran¥ partycj©",
+        "Chcesz usun¥† wybran¥ partycj©",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         18,
-        "\x07  Naci˜nij D, by skasowa† partycj©.",
+        "\x07  Naci˜nij D, by usun¥† partycj©.",
         TEXT_STYLE_NORMAL
     },
     {
         11,
         19,
-        "UWAGA: Wszystkie dane, zapisane na tej partycji zostan¥ skasowane!",
+        "UWAGA: Wszystkie dane, zapisane na tej partycji zostan¥ utracone!",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1324,7 +1330,7 @@ static MUI_ENTRY plPLDeletePartitionEntries[] =
     {
         0,
         0,
-        "D = Skasowanie partycji   ESC = Anulowanie   F3 = Wyj˜cie",
+        "D = Usuni©cie partycji   ESC = Anulowanie   F3 = Wyj˜cie",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -1456,7 +1462,7 @@ MUI_ERROR plPLErrorEntries[] =
     },
     {
         //ERROR_DELETE_SPACE,
-        "Nie mo¾esz skasowa† pustej przestrzeni, gdzie nie ma ¾adnej partycji!\n"
+        "Nie mo¾esz usun¥† pustej przestrzeni, gdzie nie ma ¾adnej partycji!\n"
         "\n"
         "  * Naci˜nij dowolny klawisz, aby kontynuowa†.",
         NULL
@@ -1727,9 +1733,9 @@ MUI_STRING plPLStrings[] =
     {STRING_INSTALLCREATELOGICAL,
      "   ENTER = Instalacja   L = Utworzenie Partycji Logicznej   F3 = Wyj˜cie"},
     {STRING_INSTALLDELETEPARTITION,
-     "   ENTER = Instalacja   D = Skasowanie Partycji   F3 = Wyj˜cie"},
+     "   ENTER = Instalacja   D = Usuni©cie Partycji   F3 = Wyj˜cie"},
     {STRING_DELETEPARTITION,
-     "   D = Skasowanie Partycji   F3 = Wyj˜cie"},
+     "   D = Usuni©cie Partycji   F3 = Wyj˜cie"},
     {STRING_PARTITIONSIZE,
      "Rozmiar nowej partycji:"},
     {STRING_CHOOSENEWPARTITION,

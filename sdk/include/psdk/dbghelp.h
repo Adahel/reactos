@@ -173,6 +173,55 @@ typedef enum
     NumSymTypes
 } SYM_TYPE;
 
+#ifdef _NO_CVCONST_H
+enum SymTagEnum
+{
+    SymTagNull,
+    SymTagExe,
+    SymTagCompiland,
+    SymTagCompilandDetails,
+    SymTagCompilandEnv,
+    SymTagFunction,
+    SymTagBlock,
+    SymTagData,
+    SymTagAnnotation,
+    SymTagLabel,
+    SymTagPublicSymbol,
+    SymTagUDT,
+    SymTagEnum,
+    SymTagFunctionType,
+    SymTagPointerType,
+    SymTagArrayType,
+    SymTagBaseType,
+    SymTagTypedef,
+    SymTagBaseClass,
+    SymTagFriend,
+    SymTagFunctionArgType,
+    SymTagFuncDebugStart,
+    SymTagFuncDebugEnd,
+    SymTagUsingNamespace,
+    SymTagVTableShape,
+    SymTagVTable,
+    SymTagCustom,
+    SymTagThunk,
+    SymTagCustomType,
+    SymTagManagedType,
+    SymTagDimension,
+    SymTagCallSite,
+    SymTagInlineSite,
+    SymTagBaseInterface,
+    SymTagVectorType,
+    SymTagMatrixType,
+    SymTagHLSLType,
+    SymTagCaller,
+    SymTagCallee,
+    SymTagExport,
+    SymTagHeapAllocationSite,
+    SymTagCoffGroup,
+    SymTagMax
+};
+#endif // _NO_CVCONST_H
+
 #if !defined(_IMAGEHLP_SOURCE_) && defined(_IMAGEHLP64)
 #define IMAGEHLP_SYMBOL IMAGEHLP_SYMBOL64
 #define IMAGEHLP_SYMBOLW IMAGEHLP_SYMBOLW64
@@ -901,9 +950,9 @@ MiniDumpWriteDump(
   _In_ DWORD,
   _In_ HANDLE,
   _In_ MINIDUMP_TYPE,
-  _In_opt_ const PMINIDUMP_EXCEPTION_INFORMATION,
-  _In_opt_ const PMINIDUMP_USER_STREAM_INFORMATION,
-  _In_opt_ const PMINIDUMP_CALLBACK_INFORMATION);
+  _In_opt_ PMINIDUMP_EXCEPTION_INFORMATION,
+  _In_opt_ PMINIDUMP_USER_STREAM_INFORMATION,
+  _In_opt_ PMINIDUMP_CALLBACK_INFORMATION);
 
 BOOL
 WINAPI
@@ -2253,6 +2302,18 @@ DWORD WINAPI SymSetOptions(_In_ DWORD);
 
 BOOL WINAPI SymSetParentWindow(_In_ HWND);
 
+BOOL
+IMAGEAPI
+SymSrvIsStore(
+  _In_opt_ HANDLE hProcess,
+  _In_ PCSTR path);
+
+BOOL
+IMAGEAPI
+SymSrvIsStoreW(
+    _In_opt_ HANDLE hProcess,
+    _In_ PCWSTR path);
+
 /*************************
  * Version, global stuff *
  *************************/
@@ -2543,12 +2604,6 @@ SymUnDName(
   _In_ DWORD UnDecNameLength);
 
 BOOL WINAPI SymUnloadModule(_In_ HANDLE, _In_ DWORD);
-
-BOOL
-IMAGEAPI
-SymSrvIsStore(
-  _In_opt_ HANDLE hProcess,
-  _In_ PCSTR path);
 
 #endif
 

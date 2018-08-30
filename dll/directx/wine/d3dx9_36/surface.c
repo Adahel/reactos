@@ -18,13 +18,19 @@
  *
  */
 
-#include "d3dx9_36_private.h"
+#include "config.h"
+#include "wine/port.h"
 
-#include <ole2.h>
-#include <wine/wined3d.h>
+#include "d3dx9_private.h"
 
-#include <initguid.h>
-#include <wincodec.h>
+#include "initguid.h"
+#include "ole2.h"
+#include "wincodec.h"
+
+#include "wine/wined3d.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(d3dx);
+
 
 /* Wine-specific WIC GUIDs */
 DEFINE_GUID(GUID_WineContainerFormatTga, 0x0c44fda1,0xa5c5,0x4298,0x96,0x85,0x47,0x3f,0xc1,0x7c,0xd3,0x22);
@@ -49,7 +55,7 @@ static D3DFORMAT wic_guid_to_d3dformat(const GUID *guid)
 {
     unsigned int i;
 
-    for (i = 0; i < sizeof(wic_pixel_formats) / sizeof(wic_pixel_formats[0]); i++)
+    for (i = 0; i < ARRAY_SIZE(wic_pixel_formats); i++)
     {
         if (IsEqualGUID(wic_pixel_formats[i].wic_guid, guid))
             return wic_pixel_formats[i].d3dformat;
@@ -62,7 +68,7 @@ static const GUID *d3dformat_to_wic_guid(D3DFORMAT format)
 {
     unsigned int i;
 
-    for (i = 0; i < sizeof(wic_pixel_formats) / sizeof(wic_pixel_formats[0]); i++)
+    for (i = 0; i < ARRAY_SIZE(wic_pixel_formats); i++)
     {
         if (wic_pixel_formats[i].d3dformat == format)
             return wic_pixel_formats[i].wic_guid;
@@ -106,6 +112,7 @@ static const GUID *d3dformat_to_wic_guid(D3DFORMAT format)
 #define DDS_PF_RGB 0x40
 #define DDS_PF_YUV 0x200
 #define DDS_PF_LUMINANCE 0x20000
+#define DDS_PF_BUMPLUMINANCE 0x40000
 #define DDS_PF_BUMPDUDV 0x80000
 
 struct dds_pixel_format
@@ -160,7 +167,7 @@ static D3DFORMAT dds_fourcc_to_d3dformat(DWORD fourcc)
         D3DFMT_A32B32G32R32F,
     };
 
-    for (i = 0; i < sizeof(known_fourcc) / sizeof(known_fourcc[0]); i++)
+    for (i = 0; i < ARRAY_SIZE(known_fourcc); i++)
     {
         if (known_fourcc[i] == fourcc)
             return fourcc;
@@ -199,7 +206,7 @@ static D3DFORMAT dds_rgb_to_d3dformat(const struct dds_pixel_format *pixel_forma
 {
     unsigned int i;
 
-    for (i = 0; i < sizeof(rgb_pixel_formats) / sizeof(rgb_pixel_formats[0]); i++)
+    for (i = 0; i < ARRAY_SIZE(rgb_pixel_formats); i++)
     {
         if (rgb_pixel_formats[i].bpp == pixel_format->bpp
             && rgb_pixel_formats[i].rmask == pixel_format->rmask
@@ -261,6 +268,17 @@ static D3DFORMAT dds_bump_to_d3dformat(const struct dds_pixel_format *pixel_form
     return D3DFMT_UNKNOWN;
 }
 
+static D3DFORMAT dds_bump_luminance_to_d3dformat(const struct dds_pixel_format *pixel_format)
+{
+    if (pixel_format->bpp == 32 && pixel_format->rmask == 0x000000ff && pixel_format->gmask == 0x0000ff00
+            && pixel_format->bmask == 0x00ff0000)
+        return D3DFMT_X8L8V8U8;
+
+    WARN("Unknown bump pixel format (%u, %#x, %#x, %#x, %#x)\n", pixel_format->bpp,
+        pixel_format->rmask, pixel_format->gmask, pixel_format->bmask, pixel_format->amask);
+    return D3DFMT_UNKNOWN;
+}
+
 static D3DFORMAT dds_pixel_format_to_d3dformat(const struct dds_pixel_format *pixel_format)
 {
     TRACE("pixel_format: size %u, flags %#x, fourcc %#x, bpp %u.\n", pixel_format->size,
@@ -278,6 +296,8 @@ static D3DFORMAT dds_pixel_format_to_d3dformat(const struct dds_pixel_format *pi
         return dds_alpha_to_d3dformat(pixel_format);
     if (pixel_format->flags & DDS_PF_BUMPDUDV)
         return dds_bump_to_d3dformat(pixel_format);
+    if (pixel_format->flags & DDS_PF_BUMPLUMINANCE)
+        return dds_bump_luminance_to_d3dformat(pixel_format);
 
     WARN("Unknown pixel format (flags %#x, fourcc %#x, bpp %u, r %#x, g %#x, b %#x, a %#x)\n",
         pixel_format->flags, pixel_format->fourcc, pixel_format->bpp,
@@ -293,7 +313,7 @@ static HRESULT d3dformat_to_dds_pixel_format(struct dds_pixel_format *pixel_form
 
     pixel_format->size = sizeof(*pixel_format);
 
-    for (i = 0; i < sizeof(rgb_pixel_formats) / sizeof(rgb_pixel_formats[0]); i++)
+    for (i = 0; i < ARRAY_SIZE(rgb_pixel_formats); i++)
     {
         if (rgb_pixel_formats[i].format == d3dformat)
         {
@@ -951,6 +971,24 @@ HRESULT WINAPI D3DXGetImageInfoFromFileInMemory(const void *data, UINT datasize,
                         hr = D3DXERR_INVALIDDATA;
                     }
                 }
+            }
+
+            /* For 32 bpp BMP, windowscodecs.dll never returns a format with alpha while
+             * d3dx9_xx.dll returns one if at least 1 pixel has a non zero alpha component */
+            if (SUCCEEDED(hr) && (info->Format == D3DFMT_X8R8G8B8) && (info->ImageFileFormat == D3DXIFF_BMP)) {
+                DWORD size = sizeof(DWORD) * info->Width * info->Height;
+                BYTE *buffer = HeapAlloc(GetProcessHeap(), 0, size);
+                hr = IWICBitmapFrameDecode_CopyPixels(frame, NULL, sizeof(DWORD) * info->Width, size, buffer);
+                if (SUCCEEDED(hr)) {
+                    DWORD i;
+                    for (i = 0; i < info->Width * info->Height; i++) {
+                        if (buffer[i*4+3]) {
+                            info->Format = D3DFMT_A8R8G8B8;
+                            break;
+                        }
+                    }
+                }
+                HeapFree(GetProcessHeap(), 0, buffer);
             }
 
             if (frame)
@@ -1932,10 +1970,10 @@ HRESULT WINAPI D3DXLoadSurfaceFromMemory(IDirect3DSurface9 *dst_surface,
         pre_convert  = get_dxtn_conversion_func(srcformatdesc->format, FALSE);
         post_convert = get_dxtn_conversion_func(destformatdesc->format, TRUE);
 
-        if ((!pre_convert && (srcformatdesc->type != FORMAT_ARGB) && (srcformatdesc->type != FORMAT_INDEX)) ||
-            (!post_convert && (destformatdesc->type != FORMAT_ARGB)))
+        if ((!pre_convert && !is_conversion_from_supported(srcformatdesc)) ||
+                (!post_convert && !is_conversion_to_supported(destformatdesc)))
         {
-            FIXME("Format conversion missing %#x -> %#x\n", src_format, surfdesc.Format);
+            FIXME("Unsupported format conversion %#x -> %#x.\n", src_format, surfdesc.Format);
             return E_NOTIMPL;
         }
 
@@ -2265,9 +2303,10 @@ HRESULT WINAPI D3DXSaveSurfaceToFileInMemory(ID3DXBuffer **dst_buffer, D3DXIMAGE
 
             src_format_desc = get_format_info(src_surface_desc.Format);
             dst_format_desc = get_format_info(d3d_pixel_format);
-            if (src_format_desc->type != FORMAT_ARGB || dst_format_desc->type != FORMAT_ARGB)
+            if (!is_conversion_from_supported(src_format_desc)
+                    || !is_conversion_to_supported(dst_format_desc))
             {
-                FIXME("Unsupported pixel format conversion %#x -> %#x\n",
+                FIXME("Unsupported format conversion %#x -> %#x.\n",
                     src_surface_desc.Format, d3d_pixel_format);
                 hr = E_NOTIMPL;
                 goto cleanup;

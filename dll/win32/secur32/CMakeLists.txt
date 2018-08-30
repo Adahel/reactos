@@ -17,7 +17,6 @@ list(APPEND SOURCE
     wine/negotiate.c
     wine/ntlm.c
     wine/util.c
-	unimplemented.c
     precomp.h)
 
 add_library(secur32 SHARED

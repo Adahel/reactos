@@ -19,11 +19,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <stdarg.h>
-#include <windef.h>
-#include <winbase.h>
-#include <wincon.h>
-#include <winuser.h>
+#include <stdlib.h>
+#include <windows.h>
 #include <psapi.h>
 #include <wine/debug.h>
 #include <wine/unicode.h>
@@ -77,7 +74,7 @@ static int taskkill_vprintfW(const WCHAR *msg, __ms_va_list va_args)
     return count;
 }
 
-static int CDECL taskkill_printfW(const WCHAR *msg, ...)
+static int WINAPIV taskkill_printfW(const WCHAR *msg, ...)
 {
     __ms_va_list va_args;
     int len;
@@ -89,7 +86,7 @@ static int CDECL taskkill_printfW(const WCHAR *msg, ...)
     return len;
 }
 
-static int CDECL taskkill_message_printfW(int msg, ...)
+static int WINAPIV taskkill_message_printfW(int msg, ...)
 {
     __ms_va_list va_args;
     WCHAR msg_buffer[8192];

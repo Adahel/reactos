@@ -84,6 +84,21 @@ typedef struct
 DECLARE_HANDLE(HPSXA);
 #endif
 
+typedef enum
+{
+    KF_FLAG_DEFAULT                     = 0x00000000,
+    KF_FLAG_SIMPLE_IDLIST               = 0x00000100,
+    KF_FLAG_NOT_PARENT_RELATIVE         = 0x00000200,
+    KF_FLAG_DEFAULT_PATH                = 0x00000400,
+    KF_FLAG_INIT                        = 0x00000800,
+    KF_FLAG_NO_ALIAS                    = 0x00001000,
+    KF_FLAG_DONT_UNEXPAND               = 0x00002000,
+    KF_FLAG_DONT_VERIFY                 = 0x00004000,
+    KF_FLAG_CREATE                      = 0x00008000,
+    KF_FLAG_NO_APPCONTAINER_REDIRECTION = 0x00010000,
+    KF_FLAG_ALIAS_ONLY                  = 0x80000000
+} KNOWN_FOLDER_FLAG;
+
 typedef int GPFIDL_FLAGS;
 
 UINT
@@ -1345,6 +1360,8 @@ typedef struct
     UINT :15; /* Required for proper binary layout with gcc */
 } SHELLSTATE, *LPSHELLSTATE;
 
+VOID WINAPI SHGetSetSettings(LPSHELLSTATE lpss, DWORD dwMask, BOOL bSet);
+
 /**********************************************************************
  * SHGetSettings ()
  */
@@ -1384,6 +1401,8 @@ VOID WINAPI SHGetSettings(_Out_ LPSHELLFLAGSTATE lpsfs, DWORD dwMask);
 #define SSF_MAPNETDRVBUTTON		0x1000
 #define SSF_NOCONFIRMRECYCLE		0x8000
 #define SSF_HIDEICONS			0x4000
+#define SSF_SHOWSUPERHIDDEN		0x00040000
+#define SSF_SEPPROCESS			0x00080000
 
 /****************************************************************************
 * SHRestricted API
@@ -2161,6 +2180,10 @@ HRESULT      WINAPI ILLoadFromStream(_In_ LPSTREAM, _Inout_ LPITEMIDLIST*);
 BOOL         WINAPI ILRemoveLastID(_Inout_opt_ LPITEMIDLIST);
 HRESULT      WINAPI ILSaveToStream(_In_ LPSTREAM, _In_ LPCITEMIDLIST);
 
+static inline BOOL ILIsEmpty(_In_opt_ LPCITEMIDLIST pidl)
+{
+    return !(pidl && pidl->mkid.cb);
+}
 
 #include <poppack.h>
 
@@ -2385,6 +2408,47 @@ DECLARE_INTERFACE_(IDockingWindowSite, IOleWindow)
 #endif
 
 typedef void (CALLBACK *PFNASYNCICONTASKBALLBACK)(LPCITEMIDLIST pidl, LPVOID pvData, LPVOID pvHint, INT iIconIndex, INT iOpenIconIndex);
+
+#define ISFB_MASK_STATE       0x00000001
+#define ISFB_MASK_IDLIST      0x00000010
+
+#define ISFB_STATE_QLINKSMODE 0x00000020
+#define ISFB_STATE_NOSHOWTEXT 0x00000004
+
+#include <pshpack8.h>
+
+typedef struct {
+    DWORD       dwMask;
+    DWORD       dwStateMask;
+    DWORD       dwState;
+    COLORREF    crBkgnd;
+    COLORREF    crBtnLt;
+    COLORREF    crBtnDk;
+    WORD        wViewMode;
+    WORD        wAlign;
+    IShellFolder * psf;
+    PIDLIST_ABSOLUTE pidl;
+} BANDINFOSFB, *PBANDINFOSFB;
+
+#include <poppack.h>
+
+#undef INTERFACE
+#define INTERFACE IShellFolderBand
+
+DECLARE_INTERFACE_(IShellFolderBand, IUnknown)
+{
+    // *** IUnknown methods ***
+    STDMETHOD(QueryInterface) (THIS_ REFIID riid, void **ppv) PURE;
+    STDMETHOD_(ULONG,AddRef) (THIS)  PURE;
+    STDMETHOD_(ULONG,Release) (THIS) PURE;
+
+    // *** IShellFolderBand Methods ***
+    STDMETHOD(InitializeSFB)(THIS_ IShellFolder *psf, PCIDLIST_ABSOLUTE pidl) PURE;
+    STDMETHOD(SetBandInfoSFB)(THIS_ PBANDINFOSFB pbi) PURE;
+    STDMETHOD(GetBandInfoSFB)(THIS_ PBANDINFOSFB pbi) PURE;
+};
+#undef INTERFACE
+
 
 /*****************************************************************************
  * Control Panel functions

@@ -29,7 +29,15 @@ endif()
 
 add_definitions(/Dinline=__inline /D__STDC__=1)
 
-add_compile_flags("/X /GR- /EHs-c- /GS- /Zl /W3")
+if(NOT USE_CLANG_CL)
+    add_compile_flags("/X /Zl")
+endif()
+
+add_compile_flags("/GR- /EHs-c- /GS- /W3")
+
+if(USE_CLANG_CL)
+    set(CMAKE_CL_SHOWINCLUDES_PREFIX "Note: including file: ")
+endif()
 
 # HACK: for VS 11+ we need to explicitly disable SSE, which is off by
 # default for older compilers. See CORE-6507
@@ -88,6 +96,11 @@ endif()
 # - C4115: named type definition in parentheses
 add_compile_flags("/w14115")
 
+if(USE_CLANG_CL)
+    add_compile_flags_language("-nostdinc -Wno-multichar -Wno-char-subscripts -Wno-microsoft-enum-forward-reference -Wno-pragma-pack -Wno-microsoft-anon-tag -Wno-parentheses-equality -Wno-unknown-pragmas" "C")
+    add_compile_flags_language("-nostdinc -Wno-multichar -Wno-char-subscripts -Wno-microsoft-enum-forward-reference -Wno-pragma-pack -Wno-microsoft-anon-tag -Wno-parentheses-equality -Wno-unknown-pragmas" "CXX")
+endif()
+
 # Debugging
 #if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -101,7 +114,9 @@ endif()
 
 # Hotpatchable images
 if(ARCH STREQUAL "i386")
-    add_compile_flags("/hotpatch")
+    if(NOT USE_CLANG_CL)
+        add_compile_flags("/hotpatch")
+    endif()
     set(_hotpatch_link_flag "/FUNCTIONPADMIN:5")
 elseif(ARCH STREQUAL "amd64")
     set(_hotpatch_link_flag "/FUNCTIONPADMIN:6")
@@ -124,6 +139,12 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MANIFEST:NO /INCREMENTAL:
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /MANIFEST:NO /INCREMENTAL:NO /SAFESEH:NO /NODEFAULTLIB /RELEASE /IGNORE:4104 ${_hotpatch_link_flag}")
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /MANIFEST:NO /INCREMENTAL:NO /SAFESEH:NO /NODEFAULTLIB /RELEASE ${_hotpatch_link_flag}")
 
+# HACK: Remove the /implib argument, implibs are generated separately
+string(REPLACE "/implib:<TARGET_IMPLIB>" "" CMAKE_C_LINK_EXECUTABLE "${CMAKE_C_LINK_EXECUTABLE}")
+string(REPLACE "/implib:<TARGET_IMPLIB>" "" CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE}")
+string(REPLACE "/implib:<TARGET_IMPLIB>" "" CMAKE_C_CREATE_SHARED_LIBRARY "${CMAKE_C_CREATE_SHARED_LIBRARY}")
+string(REPLACE "/implib:<TARGET_IMPLIB>" "" CMAKE_CXX_CREATE_SHARED_LIBRARY "${CMAKE_CXX_CREATE_SHARED_LIBRARY}")
+
 if(CMAKE_DISABLE_NINJA_DEPSLOG)
     set(cl_includes_flag "")
 else()
@@ -134,14 +155,8 @@ if(MSVC_IDE AND (CMAKE_VERSION MATCHES "ReactOS"))
     # For VS builds we'll only have en-US in resource files
     add_definitions(/DLANGUAGE_EN_US)
 else()
-    # Only VS 10+ resource compiler supports /nologo
-    if(MSVC_VERSION GREATER 1599)
-        set(rc_nologo_flag "/nologo")
-    else()
-        set(rc_nologo_flag)
-    endif()
     if(CMAKE_VERSION VERSION_LESS 3.4.0)
-        set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> ${rc_nologo_flag} <FLAGS> <DEFINES> ${I18N_DEFS} /fo<OBJECT> <SOURCE>")
+        set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> /nologo <FLAGS> <DEFINES> ${I18N_DEFS} /fo<OBJECT> <SOURCE>")
         if(ARCH STREQUAL "arm")
             set(CMAKE_ASM_COMPILE_OBJECT
                 "cl ${cl_includes_flag} /nologo /X /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm <FLAGS> <DEFINES> /D__ASM__ /D_USE_ML /EP /c <SOURCE> > <OBJECT>.tmp"
@@ -152,7 +167,7 @@ else()
                 "<CMAKE_ASM_COMPILER> /nologo /Cp /Fo<OBJECT> /c /Ta <OBJECT>.tmp")
         endif()
     else()
-        set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> ${rc_nologo_flag} <INCLUDES> <FLAGS> <DEFINES> ${I18N_DEFS} /fo<OBJECT> <SOURCE>")
+        set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> /nologo <INCLUDES> <FLAGS> <DEFINES> ${I18N_DEFS} /fo<OBJECT> <SOURCE>")
         if(ARCH STREQUAL "arm")
             set(CMAKE_ASM_COMPILE_OBJECT
                 "cl ${cl_includes_flag} /nologo /X /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm <INCLUDES> <FLAGS> <DEFINES> /D__ASM__ /D_USE_ML /EP /c <SOURCE> > <OBJECT>.tmp"
@@ -208,7 +223,9 @@ if(PCH)
 
         if(IS_CPP)
             set(_pch_language CXX)
-            set(_cl_lang_flag "/TP")
+            if(NOT USE_CLANG_CL)
+                set(_cl_lang_flag "/TP")
+            endif()
         else()
             set(_pch_language C)
             set(_cl_lang_flag "/TC")
@@ -218,12 +235,18 @@ if(PCH)
             set(_pch_path_name_flag "/Fp${_gch}")
         endif()
 
+        if(USE_CLANG_CL)
+            set(_pch_compile_flags "${_cl_lang_flag} /Yc${_pch} /FI${_pch} /Fp${_gch}")
+        else()
+            set(_pch_compile_flags "${_cl_lang_flag} /Yc /Fp${_gch}")
+        endif()
+
         # Build the precompiled header
         # HEADER_FILE_ONLY FALSE: force compiling the header
         set_source_files_properties(${_pch} PROPERTIES
             HEADER_FILE_ONLY FALSE
             LANGUAGE ${_pch_language}
-            COMPILE_FLAGS "${_cl_lang_flag} /Yc /Fp${_gch}"
+            COMPILE_FLAGS ${_pch_compile_flags}
             OBJECT_OUTPUTS ${_gch})
 
         # Prevent a race condition related to writing to the PDB files between the PCH and the excluded list of source files
@@ -312,8 +335,13 @@ function(add_delay_importlibs _module)
         message(FATAL_ERROR "Cannot add delay imports to a static library")
     endif()
     foreach(_lib ${ARGN})
-        add_target_link_flags(${_module} "/DELAYLOAD:${_lib}.dll")
-        target_link_libraries(${_module} lib${_lib})
+        get_filename_component(_basename "${_lib}" NAME_WE)
+        get_filename_component(_ext "${_lib}" EXT)
+        if(NOT _ext)
+            set(_ext ".dll")
+        endif()
+        add_target_link_flags(${_module} "/DELAYLOAD:${_basename}${_ext}")
+        target_link_libraries(${_module} "lib${_basename}")
     endforeach()
     target_link_libraries(${_module} delayimp)
 endfunction()
@@ -407,7 +435,9 @@ set(PSEH_LIB "pseh")
 # Use a full path for the x86 version of ml when using x64 VS.
 # It's not a problem when using the DDK/WDK because, in x64 mode,
 # both the x86 and x64 versions of ml are available.
-if((ARCH STREQUAL "amd64") AND (DEFINED ENV{VCINSTALLDIR}))
+if((ARCH STREQUAL "amd64") AND (DEFINED ENV{VCToolsInstallDir}))
+    set(CMAKE_ASM16_COMPILER $ENV{VCToolsInstallDir}/bin/HostX86/x86/ml.exe)
+elseif((ARCH STREQUAL "amd64") AND (DEFINED ENV{VCINSTALLDIR}))
     set(CMAKE_ASM16_COMPILER $ENV{VCINSTALLDIR}/bin/ml.exe)
 elseif(ARCH STREQUAL "arm")
     set(CMAKE_ASM16_COMPILER armasm.exe)
@@ -419,9 +449,15 @@ function(CreateBootSectorTarget _target_name _asm_file _binary_file _base_addres
     set(_object_file ${_binary_file}.obj)
     set(_temp_file ${_binary_file}.tmp)
 
+    if(USE_CLANG_CL)
+        set(_no_std_includes_flag "-nostdinc")
+    else()
+        set(_no_std_includes_flag "/X")
+    endif()
+
     add_custom_command(
         OUTPUT ${_temp_file}
-        COMMAND ${CMAKE_C_COMPILER} /nologo /X /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm /I${REACTOS_SOURCE_DIR}/boot/freeldr /D__ASM__ /D_USE_ML /EP /c ${_asm_file} > ${_temp_file}
+        COMMAND ${CMAKE_C_COMPILER} /nologo ${_no_std_includes_flag} /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm /I${REACTOS_SOURCE_DIR}/boot/freeldr /D__ASM__ /D_USE_ML /EP /c ${_asm_file} > ${_temp_file}
         DEPENDS ${_asm_file})
 
     if(ARCH STREQUAL "arm")

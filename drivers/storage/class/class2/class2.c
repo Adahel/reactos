@@ -8,6 +8,7 @@
 
 #include <ntddk.h>
 #include <ntdddisk.h>
+#include <mountdev.h>
 #include <scsi.h>
 #include <include/class2.h>
 #include <stdio.h>
@@ -4040,6 +4041,51 @@ Return Value:
         goto SetStatusAndReturn;
     }
 
+    if (irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_MOUNTDEV_QUERY_UNIQUE_ID ||
+        irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_MOUNTDEV_QUERY_SUGGESTED_LINK_NAME) {
+
+        UNIMPLEMENTED;
+        Irp->IoStatus.Information = 0;
+        Irp->IoStatus.Status = STATUS_NOT_IMPLEMENTED;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        status = STATUS_NOT_IMPLEMENTED;
+        goto SetStatusAndReturn;
+    }
+
+    if (irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_MOUNTDEV_QUERY_DEVICE_NAME) {
+
+        PMOUNTDEV_NAME name = Irp->AssociatedIrp.SystemBuffer;
+
+        if (irpStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(MOUNTDEV_NAME)) {
+
+            Irp->IoStatus.Information = 0;
+            Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            status = STATUS_INVALID_PARAMETER;
+            goto SetStatusAndReturn;
+        }
+
+        RtlZeroMemory(name, sizeof(MOUNTDEV_NAME));
+        name->NameLength = deviceExtension->DeviceName.Length;
+
+        if (irpStack->Parameters.DeviceIoControl.OutputBufferLength < FIELD_OFFSET(MOUNTDEV_NAME, Name) + name->NameLength) {
+
+            Irp->IoStatus.Information = sizeof(MOUNTDEV_NAME);
+            Irp->IoStatus.Status = STATUS_BUFFER_OVERFLOW;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            status = STATUS_BUFFER_OVERFLOW;
+            goto SetStatusAndReturn;
+        }
+
+        RtlCopyMemory(name->Name, deviceExtension->DeviceName.Buffer,
+                      name->NameLength);
+        status = STATUS_SUCCESS;
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        Irp->IoStatus.Information = FIELD_OFFSET(MOUNTDEV_NAME, Name) + name->NameLength;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        goto SetStatusAndReturn;
+    }
+
     srb = ExAllocatePool(NonPagedPool, SCSI_REQUEST_BLOCK_SIZE);
 
     if (srb == NULL) {
@@ -4124,8 +4170,6 @@ Return Value:
                 IoCompleteRequest(Irp, IO_NO_INCREMENT);
                 status = STATUS_INSUFFICIENT_RESOURCES;
                 goto SetStatusAndReturn;
-
-                break;
             }
 
             irp2->Tail.Overlay.Thread = Irp->Tail.Overlay.Thread;
@@ -4679,19 +4723,13 @@ Return Value:
         } else {
             deviceExtension->PhysicalDevice = deviceObject;
         }
+
+        deviceExtension->DeviceName = ntUnicodeString;
     }
 
     deviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
     *DeviceObject = deviceObject;
-
-    RtlFreeUnicodeString(&ntUnicodeString);
-
-    //
-    // Indicate the ntUnicodeString is free.
-    //
-
-    ntUnicodeString.Buffer = NULL;
 
     return status;
 }

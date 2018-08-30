@@ -98,6 +98,16 @@ HTHEME GetNCCaptionTheme(HWND hWnd, DWORD style)
     if (pwndData == NULL)
         return NULL;
 
+    if (!(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT))
+    {
+        if (pwndData->hthemeWindow)
+        {
+            CloseThemeData(pwndData->hthemeWindow);
+            pwndData->hthemeWindow = NULL;
+        }
+        return NULL;
+    }
+
     /* If the theme data was not cached, open it now */
     if (!pwndData->hthemeWindow)
         pwndData->hthemeWindow = OpenThemeDataEx(hWnd, L"WINDOW", OTD_NONCLIENT);
@@ -117,6 +127,16 @@ HTHEME GetNCScrollbarTheme(HWND hWnd, DWORD style)
     pwndData = ThemeGetWndData(hWnd);
     if (pwndData == NULL)
         return NULL;
+
+    if (!(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT))
+    {
+        if (pwndData->hthemeScrollbar)
+        {
+            CloseThemeData(pwndData->hthemeScrollbar);
+            pwndData->hthemeScrollbar = NULL;
+        }
+        return NULL;
+    }
 
     /* If the theme data was not cached, open it now */
     if (!pwndData->hthemeScrollbar)
@@ -215,14 +235,14 @@ int OnPostWinPosChanged(HWND hWnd, WINDOWPOS* pWinPos)
         return 0;
 
     /* We don't touch the shape of the window if the application sets it on its own */
-    if (pwndData->HasAppDefinedRgn == TRUE)
+    if (pwndData->HasAppDefinedRgn != FALSE)
         return 0;
 
     /* Calling SetWindowRgn will call SetWindowPos again so we need to avoid this recursion */
-    if (pwndData->UpdatingRgn == TRUE)
+    if (pwndData->UpdatingRgn != FALSE)
         return 0;
 
-    if(!IsAppThemed())
+    if(!IsAppThemed() || !(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT))
     {
         if(pwndData->HasThemeRgn)
         {
@@ -247,8 +267,14 @@ int OnPostWinPosChanged(HWND hWnd, WINDOWPOS* pWinPos)
 
 static LRESULT CALLBACK
 ThemeDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
-{      
-    if(!IsAppThemed())
+{
+    PWND_DATA pwndData;
+
+    pwndData = (PWND_DATA)GetPropW(hWnd, (LPCWSTR)MAKEINTATOM(atWndContext));
+
+    if(!IsAppThemed() || 
+       !(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT) ||
+       (pwndData && pwndData->HasAppDefinedRgn))
     {
         return g_user32ApiHook.DefWindowProcW(hWnd, 
                                             Msg, 
@@ -266,7 +292,13 @@ ThemeDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 static LRESULT CALLBACK
 ThemeDefWindowProcA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
-    if(!IsAppThemed())
+    PWND_DATA pwndData;
+
+    pwndData = (PWND_DATA)GetPropW(hWnd, (LPCWSTR)MAKEINTATOM(atWndContext));
+
+    if(!IsAppThemed() || 
+       !(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT) ||
+       (pwndData && pwndData->HasAppDefinedRgn))
     {
         return g_user32ApiHook.DefWindowProcA(hWnd, 
                                             Msg, 
@@ -456,7 +488,7 @@ ThemeDlgPostWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_
             HBRUSH* phbrush = (HBRUSH*)ret;
             HTHEME hTheme;
 
-            if (!IsAppThemed())
+            if(!IsAppThemed() || !(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT))
                 break;
 
             if (!IsThemeDialogTextureEnabled (hWnd))
@@ -481,6 +513,7 @@ ThemeDlgPostWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_
                     HackFillStaticBg(hwndTarget, hdc, phbrush);
             }
 #endif
+            SetBkMode( hdc, TRANSPARENT );
             break;
         }
     }
@@ -507,7 +540,7 @@ BOOL WINAPI ThemeGetScrollInfo(HWND hwnd, int fnBar, LPSCROLLINFO lpsi)
     BOOL ret;
 
     /* Avoid creating a window context if it is not needed */
-    if(!IsAppThemed())
+    if(!IsAppThemed() || !(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT))
         goto dodefault;
 
     style = GetWindowLongW(hwnd, GWL_STYLE);
@@ -664,7 +697,7 @@ ThemeHooksInstall()
         ret = FALSE;
     }
 
-    UXTHEME_broadcast_msg (NULL, WM_THEMECHANGED);
+    UXTHEME_broadcast_theme_changed (NULL, TRUE);
 
     return ret;
 }
@@ -676,7 +709,7 @@ ThemeHooksRemove()
 
     ret = UnregisterUserApiHook();
 
-    UXTHEME_broadcast_msg (NULL, WM_THEMECHANGED);
+    UXTHEME_broadcast_theme_changed (NULL, FALSE);
 
     return ret;
 }

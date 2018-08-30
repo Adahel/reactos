@@ -164,7 +164,7 @@ static UINT FASTCALL
 MsgMemorySize(PMSGMEMORY MsgMemoryEntry, WPARAM wParam, LPARAM lParam)
 {
     CREATESTRUCTW *Cs;
-    PUNICODE_STRING WindowName;
+    PLARGE_STRING WindowName;
     PUNICODE_STRING ClassName;
     UINT Size = 0;
 
@@ -196,7 +196,7 @@ MsgMemorySize(PMSGMEMORY MsgMemoryEntry, WPARAM wParam, LPARAM lParam)
             case WM_CREATE:
             case WM_NCCREATE:
                 Cs = (CREATESTRUCTW *) lParam;
-                WindowName = (PUNICODE_STRING) Cs->lpszName;
+                WindowName = (PLARGE_STRING) Cs->lpszName;
                 ClassName = (PUNICODE_STRING) Cs->lpszClass;
                 Size = sizeof(CREATESTRUCTW) + WindowName->Length + sizeof(WCHAR);
                 if (IS_ATOM(ClassName->Buffer))
@@ -2090,7 +2090,7 @@ NtUserPostThreadMessage(DWORD idThread,
 
     UserEnterExclusive();
 
-    Status = PsLookupThreadByThreadId((HANDLE)idThread,&peThread);
+    Status = PsLookupThreadByThreadId(UlongToHandle(idThread), &peThread);
 
     if ( Status == STATUS_SUCCESS )
     {

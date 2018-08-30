@@ -27,7 +27,25 @@
  *  - Checks for integer addition overflow in user marshall functions
  */
 
-#include "precomp.h"
+#include <assert.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
+
+#define NONAMELESSUNION
+#include "windef.h"
+#include "winbase.h"
+#include "winerror.h"
+
+#include "ndr_misc.h"
+#include "rpcndr.h"
+#include "ndrtypes.h"
+
+#include "wine/unicode.h"
+#include "wine/rpcfc.h"
+
+#include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ole);
 
@@ -2929,7 +2947,7 @@ static unsigned char * ComplexMarshall(PMIDL_STUB_MESSAGE pStubMsg,
       {
         /* for some reason interface pointers aren't generated as
          * RPC_FC_POINTER, but instead as RPC_FC_EMBEDDED_COMPLEX, yet
-         * they still need the derefencing treatment that pointers are
+         * they still need the dereferencing treatment that pointers are
          * given */
         if (*desc == RPC_FC_IP)
           m(pStubMsg, *(unsigned char **)pMemory, desc);
@@ -3105,7 +3123,7 @@ static unsigned char * ComplexUnmarshall(PMIDL_STUB_MESSAGE pStubMsg,
       {
         /* for some reason interface pointers aren't generated as
          * RPC_FC_POINTER, but instead as RPC_FC_EMBEDDED_COMPLEX, yet
-         * they still need the derefencing treatment that pointers are
+         * they still need the dereferencing treatment that pointers are
          * given */
         if (*desc == RPC_FC_IP)
           m(pStubMsg, (unsigned char **)pMemory, desc, FALSE);
@@ -3229,7 +3247,7 @@ static unsigned char * ComplexBufferSize(PMIDL_STUB_MESSAGE pStubMsg,
       {
         /* for some reason interface pointers aren't generated as
          * RPC_FC_POINTER, but instead as RPC_FC_EMBEDDED_COMPLEX, yet
-         * they still need the derefencing treatment that pointers are
+         * they still need the dereferencing treatment that pointers are
          * given */
         if (*desc == RPC_FC_IP)
           m(pStubMsg, *(unsigned char **)pMemory, desc);
@@ -3330,7 +3348,7 @@ static unsigned char * ComplexFree(PMIDL_STUB_MESSAGE pStubMsg,
       {
         /* for some reason interface pointers aren't generated as
          * RPC_FC_POINTER, but instead as RPC_FC_EMBEDDED_COMPLEX, yet
-         * they still need the derefencing treatment that pointers are
+         * they still need the dereferencing treatment that pointers are
          * given */
         if (*desc == RPC_FC_IP)
           m(pStubMsg, *(unsigned char **)pMemory, desc);
@@ -5727,11 +5745,16 @@ static unsigned char *union_arm_marshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned c
                   pStubMsg->Buffer = saved_buffer + 4;
                 }
                 break;
+            case RPC_FC_IP:
+                /* must be dereferenced first */
+                m(pStubMsg, *(unsigned char **)pMemory, desc);
+                break;
             default:
                 m(pStubMsg, pMemory, desc);
             }
         }
-        else FIXME("no marshaller for embedded type %02x\n", *desc);
+        else if (*desc)
+            FIXME("no marshaller for embedded type %02x\n", *desc);
     }
     return NULL;
 }
@@ -5796,11 +5819,16 @@ static unsigned char *union_arm_unmarshall(PMIDL_STUB_MESSAGE pStubMsg,
                   pStubMsg->Buffer = saved_buffer + 4;
                 }
                 break;
+            case RPC_FC_IP:
+                /* must be dereferenced first */
+                m(pStubMsg, *(unsigned char ***)ppMemory, desc, fMustAlloc);
+                break;
             default:
                 m(pStubMsg, ppMemory, desc, fMustAlloc);
             }
         }
-        else FIXME("no marshaller for embedded type %02x\n", *desc);
+        else if (*desc)
+            FIXME("no marshaller for embedded type %02x\n", *desc);
     }
     return NULL;
 }
@@ -5850,11 +5878,16 @@ static void union_arm_buffer_size(PMIDL_STUB_MESSAGE pStubMsg,
                     pStubMsg->BufferLength = saved_buffer_length;
                 }
                 break;
+            case RPC_FC_IP:
+                /* must be dereferenced first */
+                m(pStubMsg, *(unsigned char **)pMemory, desc);
+                break;
             default:
                 m(pStubMsg, pMemory, desc);
             }
         }
-        else FIXME("no buffersizer for embedded type %02x\n", *desc);
+        else if (*desc)
+            FIXME("no buffersizer for embedded type %02x\n", *desc);
     }
 }
 
@@ -5902,7 +5935,8 @@ static ULONG union_arm_memory_size(PMIDL_STUB_MESSAGE pStubMsg,
                 return m(pStubMsg, desc);
             }
         }
-        else FIXME("no marshaller for embedded type %02x\n", *desc);
+        else if (*desc)
+            FIXME("no marshaller for embedded type %02x\n", *desc);
     }
 
     TRACE("size %d\n", size);
@@ -5936,6 +5970,10 @@ static void union_arm_free(PMIDL_STUB_MESSAGE pStubMsg,
             case RPC_FC_OP:
             case RPC_FC_FP:
                 PointerFree(pStubMsg, *(unsigned char **)pMemory, desc);
+                break;
+            case RPC_FC_IP:
+                /* must be dereferenced first */
+                m(pStubMsg, *(unsigned char **)pMemory, desc);
                 break;
             default:
                 m(pStubMsg, pMemory, desc);

@@ -17,6 +17,9 @@
 #include <debug.h>
 #include "internal/io_i.h"
 
+volatile LONG IoPageReadIrpAllocationFailure = 0;
+volatile LONG IoPageReadNonPagefileIrpAllocationFailure = 0;
+
 /* PRIVATE FUNCTIONS *********************************************************/
 
 VOID
@@ -213,6 +216,7 @@ IopDeviceFsIoControl(IN HANDLE DeviceHandle,
     ACCESS_MASK DesiredAccess;
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     ULONG BufferLength;
+    POOL_TYPE PoolType;
 
     PAGED_CODE();
 
@@ -495,6 +499,8 @@ IopDeviceFsIoControl(IN HANDLE DeviceHandle,
     StackPtr->Parameters.DeviceIoControl.OutputBufferLength =
         OutputBufferLength;
 
+    PoolType = IsDevIoCtl ? NonPagedPoolCacheAligned : NonPagedPool;
+
     /* Handle the Methods */
     switch (AccessType)
     {
@@ -513,9 +519,9 @@ IopDeviceFsIoControl(IN HANDLE DeviceHandle,
                 {
                     /* Allocate the System Buffer */
                     Irp->AssociatedIrp.SystemBuffer =
-                        ExAllocatePoolWithTag(NonPagedPool,
-                                              BufferLength,
-                                              TAG_SYS_BUF);
+                        ExAllocatePoolWithQuotaTag(PoolType,
+                                                   BufferLength,
+                                                   TAG_SYS_BUF);
 
                     /* Check if we got a buffer */
                     if (InputBuffer)
@@ -560,9 +566,9 @@ IopDeviceFsIoControl(IN HANDLE DeviceHandle,
                 {
                     /* Allocate the System Buffer */
                     Irp->AssociatedIrp.SystemBuffer =
-                        ExAllocatePoolWithTag(NonPagedPool,
-                                              InputBufferLength,
-                                              TAG_SYS_BUF);
+                        ExAllocatePoolWithQuotaTag(PoolType,
+                                                   InputBufferLength,
+                                                   TAG_SYS_BUF);
 
                     /* Copy into the System Buffer */
                     RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer,
@@ -574,7 +580,7 @@ IopDeviceFsIoControl(IN HANDLE DeviceHandle,
                 }
 
                 /* Check if we got an output buffer */
-                if (OutputBuffer)
+                if (OutputBufferLength)
                 {
                     /* Allocate the System Buffer */
                     Irp->MdlAddress = IoAllocateMdl(OutputBuffer,
@@ -1036,6 +1042,14 @@ IoSynchronousPageWrite(IN PFILE_OBJECT FileObject,
     IOTRACE(IO_API_DEBUG, "FileObject: %p. Mdl: %p. Offset: %p \n",
             FileObject, Mdl, Offset);
 
+    /* Is the write originating from Cc? */
+    if (FileObject->SectionObjectPointer != NULL &&
+        FileObject->SectionObjectPointer->SharedCacheMap != NULL)
+    {
+        ++CcDataFlushes;
+        CcDataPages += BYTES_TO_PAGES(MmGetMdlByteCount(Mdl));
+    }
+
     /* Get the Device Object */
     DeviceObject = IoGetRelatedDeviceObject(FileObject);
 
@@ -1088,7 +1102,30 @@ IoPageRead(IN PFILE_OBJECT FileObject,
 
     /* Allocate IRP */
     Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
-    if (!Irp) return STATUS_INSUFFICIENT_RESOURCES;
+    /* If allocation failed, try to see whether we can use
+     * the reserve IRP
+     */
+    if (Irp == NULL)
+    {
+        /* We will use it only for paging file */
+        if (MmIsFileObjectAPagingFile(FileObject))
+        {
+            InterlockedExchangeAdd(&IoPageReadIrpAllocationFailure, 1);
+            Irp = IopAllocateReserveIrp(DeviceObject->StackSize);
+        }
+        else
+        {
+            InterlockedExchangeAdd(&IoPageReadNonPagefileIrpAllocationFailure, 1);
+        }
+
+        /* If allocation failed (not a paging file or too big stack size)
+         * Fail for real
+         */
+        if (Irp == NULL)
+        {
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
 
     /* Get the Stack */
     StackPtr = IoGetNextIrpStackLocation(Irp);
@@ -3499,13 +3536,11 @@ NtWriteFile(IN HANDLE FileHandle,
     CapturedByteOffset.QuadPart = 0;
     IOTRACE(IO_API_DEBUG, "FileHandle: %p\n", FileHandle);
 
-    /* Get File Object */
-    Status = ObReferenceObjectByHandle(FileHandle,
-                                       0,
-                                       IoFileObjectType,
-                                       PreviousMode,
-                                       (PVOID*)&FileObject,
-                                       &ObjectHandleInfo);
+    /* Get File Object for write */
+    Status = ObReferenceFileObjectForWrite(FileHandle,
+                                           PreviousMode,
+                                           &FileObject,
+                                           &ObjectHandleInfo);
     if (!NT_SUCCESS(Status)) return Status;
 
     /* Validate User-Mode Buffers */
@@ -3513,21 +3548,6 @@ NtWriteFile(IN HANDLE FileHandle,
     {
         _SEH2_TRY
         {
-            /*
-             * Check if the handle has either FILE_WRITE_DATA or
-             * FILE_APPEND_DATA granted. However, if this is a named pipe,
-             * make sure we don't ask for FILE_APPEND_DATA as it interferes
-             * with the FILE_CREATE_PIPE_INSTANCE access right!
-             */
-            if (!(ObjectHandleInfo.GrantedAccess &
-                 ((!(FileObject->Flags & FO_NAMED_PIPE) ?
-                   FILE_APPEND_DATA : 0) | FILE_WRITE_DATA)))
-            {
-                /* We failed */
-                ObDereferenceObject(FileObject);
-                _SEH2_YIELD(return STATUS_ACCESS_DENIED);
-            }
-
             /* Probe the status block */
             ProbeForWriteIoStatusBlock(IoStatusBlock);
 

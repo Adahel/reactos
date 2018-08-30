@@ -186,7 +186,7 @@ MirrorRgnDC(
     _In_ HRGN hrgn,
     _In_ HRGN *phrn)
 {
-    if (!GdiIsHandleValid((HGDIOBJ) hdc) ||
+    if (!GdiValidateHandle((HGDIOBJ) hdc) ||
         (GDI_HANDLE_GET_TYPE(hdc) != GDI_OBJECT_TYPE_DC))
         return 0;
 
@@ -575,7 +575,7 @@ HRGN
 WINAPI
 CreatePolygonRgn( const POINT * lppt, int cPoints, int fnPolyFillMode)
 {
-    return (HRGN) NtGdiPolyPolyDraw( (HDC) fnPolyFillMode, (PPOINT) lppt, (PULONG) &cPoints, 1, GdiPolyPolyRgn);
+    return (HRGN) NtGdiPolyPolyDraw( (HDC)UlongToHandle(fnPolyFillMode), (PPOINT) lppt, (PULONG) &cPoints, 1, GdiPolyPolyRgn);
 }
 
 /*
@@ -588,7 +588,7 @@ CreatePolyPolygonRgn( const POINT* lppt,
                       int nCount,
                       int fnPolyFillMode)
 {
-    return (HRGN) NtGdiPolyPolyDraw(  (HDC) fnPolyFillMode, (PPOINT) lppt, (PULONG) lpPolyCounts, (ULONG) nCount, GdiPolyPolyRgn );
+    return (HRGN) NtGdiPolyPolyDraw(  (HDC)UlongToHandle(fnPolyFillMode), (PPOINT) lppt, (PULONG) lpPolyCounts, (ULONG) nCount, GdiPolyPolyRgn );
 }
 
 /*

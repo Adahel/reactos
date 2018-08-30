@@ -952,7 +952,8 @@ NtSetSystemPowerState(IN POWER_ACTION SystemAction,
 
 #ifndef NEWCC
         /* Flush dirty cache pages */
-        CcRosFlushDirtyPages(-1, &Dummy, FALSE); //HACK: We really should wait here!
+        /* XXX: Is that still mandatory? As now we'll wait on lazy writer to complete? */
+        CcRosFlushDirtyPages(-1, &Dummy, FALSE, FALSE); //HACK: We really should wait here!
 #else
         Dummy = 0;
 #endif
@@ -990,7 +991,7 @@ NtSetSystemPowerState(IN POWER_ACTION SystemAction,
         }
 
         /* You should not have made it this far */
-        // ASSERTMSG("System is still up and running?!", FALSE);
+        // ASSERTMSG("System is still up and running?!\n", FALSE);
         DPRINT1("System is still up and running, you may not have chosen a yet supported power option: %u\n", PopAction.Action);
         break;
     }

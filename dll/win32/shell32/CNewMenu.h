@@ -60,7 +60,6 @@ private:
     CComPtr<IUnknown> m_pSite;
     HMENU m_hSubMenu;
     HICON m_hiconFolder, m_hiconLink;
-    UINT m_idCmdFirst;
 
     SHELLNEW_ITEM *LoadItem(LPCWSTR pwszExt);
     void UnloadItem(SHELLNEW_ITEM *pItem);
@@ -72,7 +71,7 @@ private:
     SHELLNEW_ITEM *FindItemFromIdOffset(UINT IdOffset);
     HRESULT CreateNewFolder(LPCMINVOKECOMMANDINFO lpici);
     HRESULT CreateNewItem(SHELLNEW_ITEM *pItem, LPCMINVOKECOMMANDINFO lpcmi);
-    HRESULT SelectNewItem(LPCMINVOKECOMMANDINFO lpici, LONG wEventId, UINT uFlags, LPWSTR pszName);
+    HRESULT SelectNewItem(LONG wEventId, UINT uFlags, LPWSTR pszName);
 
 public:
     CNewMenu();

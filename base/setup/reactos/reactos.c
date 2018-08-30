@@ -20,8 +20,7 @@
  * COPYRIGHT:   See COPYING in the top level directory
  * PROJECT:     ReactOS GUI first stage setup application
  * FILE:        base/setup/reactos/reactos.c
- * PROGRAMMERS: Eric Kohl
- *              Matthias Kupfer
+ * PROGRAMMERS: Matthias Kupfer
  *              Dmitry Chapyshev (dmitry@reactos.org)
  */
 
@@ -92,14 +91,14 @@ StartDlgProc(HWND hwndDlg,
     PSETUPDATA pSetupData;
 
     /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    pSetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
         case WM_INITDIALOG:
             /* Save pointer to the global setup data */
             pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)pSetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
 
             /* Center the wizard window */
             CenterWindow(GetParent(hwndDlg));
@@ -145,14 +144,14 @@ TypeDlgProc(HWND hwndDlg,
     PSETUPDATA pSetupData;
 
     /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    pSetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
         case WM_INITDIALOG:
             /* Save pointer to the global setup data */
             pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)pSetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
 
             /* Check the 'install' radio button */
             CheckDlgButton(hwndDlg, IDC_INSTALL, BST_CHECKED);
@@ -174,7 +173,7 @@ TypeDlgProc(HWND hwndDlg,
 
                 case PSN_QUERYCANCEL:
                     SetWindowLongPtr(hwndDlg,
-                                     DWL_MSGRESULT,
+                                     DWLP_MSGRESULT,
                                      MessageBox(GetParent(hwndDlg),
                                                 pSetupData->szAbortMessage,
                                                 pSetupData->szAbortTitle,
@@ -213,14 +212,14 @@ DeviceDlgProc(HWND hwndDlg,
     HWND hList;
 
     /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    pSetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
         case WM_INITDIALOG:
             /* Save pointer to the global setup data */
             pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)pSetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
 
             hList = GetDlgItem(hwndDlg, IDC_COMPUTER);
 
@@ -262,7 +261,7 @@ DeviceDlgProc(HWND hwndDlg,
 
                 case PSN_QUERYCANCEL:
                     SetWindowLongPtr(hwndDlg,
-                                     DWL_MSGRESULT,
+                                     DWLP_MSGRESULT,
                                      MessageBox(GetParent(hwndDlg),
                                                 pSetupData->szAbortMessage,
                                                 pSetupData->szAbortTitle,
@@ -328,14 +327,14 @@ SummaryDlgProc(HWND hwndDlg,
     PSETUPDATA pSetupData;
 
     /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    pSetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
         case WM_INITDIALOG:
             /* Save pointer to the global setup data */
             pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)pSetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
             break;
 
         case WM_NOTIFY:
@@ -350,7 +349,7 @@ SummaryDlgProc(HWND hwndDlg,
 
                 case PSN_QUERYCANCEL:
                     SetWindowLongPtr(hwndDlg,
-                                     DWL_MSGRESULT,
+                                     DWLP_MSGRESULT,
                                      MessageBox(GetParent(hwndDlg),
                                                 pSetupData->szAbortMessage,
                                                 pSetupData->szAbortTitle,
@@ -378,14 +377,14 @@ ProcessDlgProc(HWND hwndDlg,
     PSETUPDATA pSetupData;
 
     /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    pSetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
         case WM_INITDIALOG:
             /* Save pointer to the global setup data */
             pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)pSetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
             break;
 
         case WM_NOTIFY:
@@ -401,7 +400,7 @@ ProcessDlgProc(HWND hwndDlg,
                    break;
                 case PSN_QUERYCANCEL:
                     SetWindowLongPtr(hwndDlg,
-                                     DWL_MSGRESULT,
+                                     DWLP_MSGRESULT,
                                      MessageBox(GetParent(hwndDlg),
                                                 pSetupData->szAbortMessage,
                                                 pSetupData->szAbortTitle,
@@ -430,14 +429,14 @@ RestartDlgProc(HWND hwndDlg,
     PSETUPDATA pSetupData;
 
     /* Retrieve pointer to the global setup data */
-    pSetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    pSetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
         case WM_INITDIALOG:
             /* Save pointer to the global setup data */
             pSetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)pSetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)pSetupData);
 
             /* Set title font */
             /*SendDlgItemMessage(hwndDlg,

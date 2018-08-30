@@ -86,7 +86,7 @@
 86 stdcall LdrAccessOutOfProcessResource(ptr ptr ptr ptr ptr)
 87 stdcall LdrAccessResource(long ptr ptr ptr)
 88 stdcall LdrAddRefDll(long ptr)
-@ stdcall LdrAlternateResourcesEnabled()
+# 89 stdcall LdrAlternateResourcesEnabled
 90 stdcall LdrCreateOutOfProcessImage(long ptr ptr ptr)
 91 stdcall LdrDestroyOutOfProcessImage(ptr)
 92 stdcall LdrDisableThreadCalloutsForDll(long)
@@ -95,7 +95,7 @@
 95 stdcall LdrFindCreateProcessManifest(long ptr ptr long ptr) ; 5.1 and 5.2 only
 96 stdcall LdrFindEntryForAddress(ptr ptr)
 97 stdcall LdrFindResourceDirectory_U(long ptr long ptr)
-@ stdcall LdrFindResourceEx_U(long ptr long ptr ptr) ; 5.1 and higher
+# stdcall LdrFindResourceEx_U ; 5.1 and higher
 99 stdcall LdrFindResource_U(long ptr long ptr)
 100 stdcall LdrFlushAlternateResourceModules()
 101 stdcall LdrGetDllHandle(wstr long ptr ptr)
@@ -103,14 +103,14 @@
 103 stdcall LdrGetProcedureAddress(ptr ptr long ptr)
 # stdcall LdrHotPatchRoutine
 # stdcall LdrInitShimEngineDynamic
-106 stdcall LdrInitializeThunk(ptr ptr ptr)
+106 stdcall LdrInitializeThunk(long long long long)
 107 stdcall LdrLoadAlternateResourceModule(ptr ptr)
 108 stdcall LdrLoadDll(wstr long ptr ptr)
 109 stdcall LdrLockLoaderLock(long ptr ptr)
 110 stdcall LdrOpenImageFileOptionsKey(ptr long ptr) ; 5.2 SP1 and higher
 111 stdcall LdrProcessRelocationBlock(ptr long ptr long)
 112 stdcall LdrQueryImageFileExecutionOptions(ptr str long ptr long ptr)
-@ stdcall LdrQueryImageFileExecutionOptionsEx(ptr ptr long ptr long ptr long)
+# stdcall LdrQueryImageFileExecutionOptionsEx(ptr ptr long ptr long ptr long)
 114 stdcall LdrQueryImageFileKeyOption(ptr ptr long ptr long ptr)
 115 stdcall LdrQueryProcessModuleInformation(ptr long ptr)
 # stdcall LdrSetAppCompatDllRedirectionCallback
@@ -453,7 +453,7 @@
 452 stdcall RtlAddRefMemoryStream(ptr)
 453 stdcall RtlAddVectoredContinueHandler(long ptr)
 454 stdcall RtlAddVectoredExceptionHandler(long ptr)
-@ stdcall RtlAddressInSectionTable(ptr ptr long)
+# stdcall RtlAddressInSectionTable
 456 stdcall RtlAdjustPrivilege(long long long ptr)
 457 stdcall RtlAllocateActivationContextStack(ptr) ; CHECKME
 458 stdcall RtlAllocateAndInitializeSid(ptr long long long long long long long long long ptr)
@@ -583,7 +583,7 @@
 581 stdcall RtlDuplicateUnicodeString(long ptr ptr)
 582 stdcall RtlEmptyAtomTable(ptr long)
 # stdcall RtlEnableEarlyCriticalSectionEventCreation
-584 stdcall RtlEncodePointer(ptr) ;Commented for ntext Wrapper
+584 stdcall RtlEncodePointer(ptr)
 585 stdcall RtlEncodeSystemPointer(ptr)
 586 stdcall -arch=win32 -ret64 RtlEnlargedIntegerMultiply(long long)
 587 stdcall -arch=win32 RtlEnlargedUnsignedDivide(double long ptr)
@@ -651,7 +651,7 @@
 649 stdcall RtlGetCriticalSectionRecursionCount(ptr)
 650 stdcall RtlGetCurrentDirectory_U(long ptr)
 651 stdcall RtlGetCurrentPeb()
-652 stdcall RtlGetCurrentProcessorNumber() ; 5.2 SP1 and higher ;Commented for ntext wrapper
+652 stdcall RtlGetCurrentProcessorNumber() ; 5.2 SP1 and higher
 653 stdcall RtlGetDaclSecurityDescriptor(ptr ptr ptr ptr)
 654 stdcall RtlGetElementGenericTable(ptr long)
 655 stdcall RtlGetElementGenericTableAvl(ptr long)
@@ -709,8 +709,8 @@
 706 stdcall RtlInitializeSid(ptr ptr long)
 707 stdcall RtlInsertElementGenericTable(ptr ptr long ptr)
 708 stdcall RtlInsertElementGenericTableAvl(ptr ptr long ptr)
-@ stdcall RtlInsertElementGenericTableFull(ptr ptr long ptr ptr long)
-@ stdcall RtlInsertElementGenericTableFullAvl(ptr ptr long ptr ptr long)
+# RtlInsertElementGenericTableFull
+# stdcall RtlInsertElementGenericTableFullAvl(ptr ptr long ptr ptr long)
 @ stdcall -arch=x86_64 RtlInstallFunctionTableCallback(double double long ptr ptr ptr)
 711 stdcall RtlInt64ToUnicodeString(double long ptr)
 712 stdcall RtlIntegerToChar(long long long ptr)
@@ -766,8 +766,8 @@
 762 stdcall RtlLookupAtomInAtomTable(ptr wstr ptr)
 763 stdcall RtlLookupElementGenericTable(ptr ptr)
 764 stdcall RtlLookupElementGenericTableAvl(ptr ptr)
-@ stdcall RtlLookupElementGenericTableFull(ptr ptr ptr ptr)
-@ stdcall RtlLookupElementGenericTableFullAvl(ptr ptr ptr ptr)
+# RtlLookupElementGenericTableFull
+# RtlLookupElementGenericTableFullAvl
 @ stdcall -arch=x86_64 RtlLookupFunctionEntry(long ptr ptr)
 767 stdcall RtlMakeSelfRelativeSD(ptr ptr ptr)
 768 stdcall RtlMapGenericMask(long ptr)
@@ -878,7 +878,7 @@
 872 cdecl RtlSetThreadIsCritical(long ptr long)
 873 stdcall RtlSetThreadPoolStartFunc(ptr ptr)
 874 stdcall RtlSetTimeZoneInformation(ptr)
-@ stdcall RtlSetTimer(ptr ptr ptr ptr long long long)
+# stdcall RtlSetTimer
 876 stdcall RtlSetUnhandledExceptionFilter(ptr)
 # stdcall RtlSetUnicodeCallouts
 878 stdcall RtlSetUserFlagsHeap(ptr long ptr long long)
@@ -1422,66 +1422,3 @@
 @ stdcall -arch=arm __rt_udiv()
 @ stdcall -arch=arm __rt_udiv64()
 @ stdcall -arch=arm __rt_srsh()
-
-#XP x64 Wowntdll syscall
-@ stdcall NtWow64CsrAllocateCaptureBuffer(long long)
-@ stdcall NtWow64CsrAllocateMessagePointer(ptr long ptr)
-@ stdcall NtWow64CsrCaptureMessageBuffer(ptr ptr long ptr)
-@ stdcall NtWow64CsrCaptureMessageString(ptr str long long str)
-@ stdcall NtWow64CsrClientCallServer(ptr ptr long long)
-@ stdcall NtWow64CsrClientConnectToServer(wstr long ptr ptr ptr ptr)
-@ stdcall NtWow64CsrFreeCaptureBuffer(ptr)
-@ stdcall NtWow64CsrGetProcessId()
-@ stdcall NtWow64CsrIdentifyAlertableThread()
-@ stdcall NtWow64CsrNewThread()
-@ stdcall NtWow64CsrSetPriorityClass(ptr ptr)
-@ stdcall NtWow64DebuggerCall(long long long long long)
-@ stdcall NtWow64GetNativeSystemInformation(long ptr long ptr)
-@ stdcall NtWow64QueryInformationProcess64(ptr long ptr long ptr)
-@ stdcall NtWow64QueryVirtualMemory64(ptr ptr ptr long ptr long long ptr)
-@ stdcall NtWow64ReadVirtualMemory64(ptr ptr ptr ptr long long ptr)
-
-#For Ntext Wrapper
-@ stdcall LdrHotPatchRoutine(ptr)
-@ stdcall LdrInitShimEngineDynamic(ptr)
-@ stdcall LdrSetAppCompatDllRedirectionCallback(ptr ptr ptr)
-@ stdcall PfxFindPrefix(ptr ptr)
-@ stdcall PfxInitialize(ptr)
-@ stdcall PfxInsertPrefix(ptr ptr ptr)
-@ stdcall PfxRemovePrefix(ptr ptr)
-@ stdcall PropertyLengthAsVariant(ptr long long long)
-@ stdcall RtlAddCompoundAce(ptr long long long ptr ptr)
-@ stdcall RtlAppendPathElement(long ptr ptr)
-@ stdcall RtlCaptureStackContext(ptr ptr long)
-@ stdcall RtlCheckProcessParameters(ptr wstr ptr long)
-@ stdcall RtlConvertPropertyToVariant(ptr long ptr ptr)
-@ stdcall RtlConvertVariantToProperty(ptr long ptr ptr ptr long ptr)
-@ stdcall RtlDebugPrintTimes()
-@ stdcall RtlEnableEarlyCriticalSectionEventCreation()
-@ stdcall RtlGetUnloadEventTrace()
-@ stdcall RtlInitializeAtomPackage(long)
-@ stdcall RtlLogStackBackTrace()
-@ stdcall RtlMultipleAllocateHeap(ptr long long long ptr)
-@ stdcall RtlMultipleFreeHeap(ptr long long ptr)
-@ stdcall RtlQueryProcessBackTraceInformation(ptr)
-@ stdcall RtlQueryProcessHeapInformation(ptr)
-@ stdcall RtlQueryProcessLockInformation(ptr)
-@ stdcall RtlSetUnicodeCallouts(long)
-@ stdcall RtlTraceDatabaseAdd(ptr long ptr ptr)
-@ stdcall RtlTraceDatabaseCreate(long long long long ptr)
-@ stdcall RtlTraceDatabaseDestroy(ptr)
-@ stdcall RtlTraceDatabaseEnumerate(ptr ptr ptr)
-@ stdcall RtlTraceDatabaseFind(ptr long ptr ptr)
-@ stdcall RtlTraceDatabaseLock(ptr)
-@ stdcall RtlTraceDatabaseUnlock(ptr)
-@ stdcall RtlTraceDatabaseValidate(ptr)
-@ stdcall RtlUnhandledExceptionFilter2(long long)
-@ stdcall RtlpNotOwnerCriticalSection(ptr)
-
-@ stub -arch=x86_64 LdrGetKnownDllSectionHandle
-@ stub -arch=x86_64 LdrProcessInitializationComplete
-@ stub -arch=x86_64 RtlLookupFunctionTable
-@ stub -arch=x86_64 RtlCopyMemory
-@ stub -arch=x86_64 RtlCopyMemoryNonTemporal
-@ stub -arch=x86_64 RtlGetFunctionTableListHead
-@ stub -arch=x86_64 __misaligned_access

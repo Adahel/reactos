@@ -404,7 +404,7 @@ GetProcAddress(HMODULE hModule, LPCSTR lpProcName)
     PVOID hMapped;
     ULONG Ordinal = 0;
 
-    if (HIWORD(lpProcName) != 0)
+    if ((ULONG_PTR)lpProcName > MAXUSHORT)
     {
         /* Look up by name */
         RtlInitAnsiString(&ProcedureName, (LPSTR)lpProcName);
@@ -413,7 +413,7 @@ GetProcAddress(HMODULE hModule, LPCSTR lpProcName)
     else
     {
         /* Look up by ordinal */
-        Ordinal = (ULONG)lpProcName;
+        Ordinal = PtrToUlong(lpProcName);
     }
 
     /* Map provided handle */
@@ -463,6 +463,7 @@ FreeLibrary(HINSTANCE hLibModule)
     if (LDR_IS_DATAFILE(hLibModule))
     {
         // FIXME: This SEH should go inside RtlImageNtHeader instead
+        // See https://jira.reactos.org/browse/CORE-14857
         _SEH2_TRY
         {
             /* This is a LOAD_LIBRARY_AS_DATAFILE module, check if it's a valid one */
@@ -610,7 +611,7 @@ GetModuleFileNameW(HINSTANCE hModule,
     PLIST_ENTRY ModuleListHead, Entry;
     PLDR_DATA_TABLE_ENTRY Module;
     ULONG Length = 0;
-    ULONG Cookie;
+    ULONG_PTR Cookie;
     PPEB Peb;
 
     hModule = BasepMapModuleHandle(hModule, FALSE);
@@ -721,7 +722,7 @@ BOOLEAN
 WINAPI
 BasepGetModuleHandleExW(BOOLEAN NoLock, DWORD dwPublicFlags, LPCWSTR lpwModuleName, HMODULE *phModule)
 {
-    DWORD Cookie;
+    ULONG_PTR Cookie;
     NTSTATUS Status = STATUS_SUCCESS, Status2;
     HANDLE hModule = NULL;
     UNICODE_STRING ModuleNameU;

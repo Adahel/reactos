@@ -5,7 +5,7 @@
  * PURPOSE:         Device Object Management, including Notifications and Queues.
  * PROGRAMMERS:     Alex Ionescu (alex.ionescu@reactos.org)
  *                  Filip Navara (navaraf@reactos.org)
- *                  Hervé Poussineau (hpoussin@reactos.org)
+ *                  HervÃ© Poussineau (hpoussin@reactos.org)
  */
 
 /* INCLUDES *******************************************************************/
@@ -357,9 +357,8 @@ IopEditDeviceList(IN PDRIVER_OBJECT DriverObject,
                 /* Not this one, keep moving */
                 if (!Previous->NextDevice)
                 {
-                    DPRINT1("Failed to remove PDO %p on driver %wZ (not found)\n",
-                            DeviceObject,
-                            &DeviceObject->DriverObject->DriverName);
+                    DPRINT1("Failed to remove PDO %p (not found)\n",
+                            DeviceObject);
 
                     ASSERT(FALSE);
                     KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
@@ -1350,7 +1349,6 @@ IoGetRelatedDeviceObject(IN PFILE_OBJECT FileObject)
             if (FileObject->FileObjectExtension)
             {
                 PFILE_OBJECT_EXTENSION FileObjectExtension;
-                ASSERT(FALSE);
 
                 /* Cast the buffer to something we understand */
                 FileObjectExtension = FileObject->FileObjectExtension;

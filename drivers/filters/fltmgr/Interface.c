@@ -17,6 +17,20 @@
 
 /* DATA *********************************************************************/
 
+#define VALID_FAST_IO_DISPATCH_HANDLER(_FastIoDispatchPtr, _FieldName) \
+    (((_FastIoDispatchPtr) != NULL) && \
+     (((_FastIoDispatchPtr)->SizeOfFastIoDispatch) >= \
+            (FIELD_OFFSET(FAST_IO_DISPATCH, _FieldName) + sizeof(void *))) && \
+     ((_FastIoDispatchPtr)->_FieldName != NULL))
+
+#define IS_MY_DEVICE_OBJECT(_devObj) \
+    (((_devObj) != NULL) && \
+    ((_devObj)->DriverObject == Dispatcher::DriverObject) && \
+      ((_devObj)->DeviceExtension != NULL))
+
+extern PDEVICE_OBJECT CommsDeviceObject;
+
+
 DRIVER_INITIALIZE DriverEntry;
 NTSTATUS
 NTAPI
@@ -442,6 +456,13 @@ FltpDispatch(_In_ PDEVICE_OBJECT DeviceObject,
         return Status;
     }
 
+    /* Check if this is a request for a the messaging device */
+    if (DeviceObject == CommsDeviceObject)
+    {
+        /* Hand off to our internal routine */
+        return FltpMsgDispatch(DeviceObject, Irp);
+    }
+
     FLT_ASSERT(DeviceExtension &&
                DeviceExtension->AttachedToDeviceObject);
 
@@ -480,6 +501,13 @@ FltpCreate(_In_ PDEVICE_OBJECT DeviceObject,
         Irp->IoStatus.Information = 0;
         IofCompleteRequest(Irp, 0);
         return STATUS_SUCCESS;
+    }
+
+    /* Check if this is a request for a the new comms connection */
+    if (DeviceObject == CommsDeviceObject)
+    {
+        /* Hand off to our internal routine */
+        return FltpMsgCreate(DeviceObject, Irp);
     }
 
     FLT_ASSERT(DeviceExtension &&
@@ -2092,9 +2120,9 @@ DriverEntry(_In_ PDRIVER_OBJECT DriverObject,
     Status = SetupDispatchAndCallbacksTables(DriverObject);
     if (!NT_SUCCESS(Status)) goto Cleanup;
 
-    //
-    // TODO: Create fltmgr message device
-    //
+    /* Initialize the comms objects */
+    Status = FltpSetupCommunicationObjects(DriverObject);
+    if (!NT_SUCCESS(Status)) goto Cleanup;
 
     /* Register for notifications when a new file system is loaded. This also enumerates any existing file systems */
     Status = IoRegisterFsRegistrationChange(DriverObject, FltpFsNotification);

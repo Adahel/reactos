@@ -10,9 +10,7 @@
 
 #include <user32.h>
 
-#include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(user32);
-
 
 #ifdef __i386__
 /* For bad applications which provide bad (non stdcall) WndProc */
@@ -1457,26 +1455,22 @@ IntCallWindowProcW(BOOL IsAnsiProc,
          }
          _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
          {
+            ERR("Got exception in hooked PreWndProc, dlg:%d!\n", DlgOverride);
          }
          _SEH2_END;
       }
 
       if (PreResult) goto Exit;
 
-      if (!Dialog)
-      Result = CALL_EXTERN_WNDPROC(WndProc, AnsiMsg.hwnd, AnsiMsg.message, AnsiMsg.wParam, AnsiMsg.lParam);
-      else
-      {
       _SEH2_TRY
       {
          Result = CALL_EXTERN_WNDPROC(WndProc, AnsiMsg.hwnd, AnsiMsg.message, AnsiMsg.wParam, AnsiMsg.lParam);
       }
       _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
       {
-         ERR("Exception Dialog Ansi %p Msg %d pti %p Wndpti %p\n",WndProc,Msg,GetW32ThreadInfo(),pWnd->head.pti);
+         ERR("Exception when calling Ansi WndProc %p Msg %d pti %p Wndpti %p\n",WndProc,Msg,GetW32ThreadInfo(),pWnd->head.pti);
       }
       _SEH2_END;
-      }
 
       if (Hook && (MsgOverride || DlgOverride))
       {
@@ -1489,6 +1483,7 @@ IntCallWindowProcW(BOOL IsAnsiProc,
          }
          _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
          {
+            ERR("Got exception in hooked PostWndProc, dlg:%d!\n", DlgOverride);
          }
          _SEH2_END;
       }
@@ -1511,26 +1506,22 @@ IntCallWindowProcW(BOOL IsAnsiProc,
          }
          _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
          {
+            ERR("Got exception in hooked PreWndProc, dlg:%d!\n", DlgOverride);
          }
          _SEH2_END;
       }
 
       if (PreResult) goto Exit;
 
-      if (!Dialog)
-      Result = CALL_EXTERN_WNDPROC(WndProc, hWnd, Msg, wParam, lParam);
-      else
-      {
       _SEH2_TRY
       {
          Result = CALL_EXTERN_WNDPROC(WndProc, hWnd, Msg, wParam, lParam);
       }
       _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
       {
-         ERR("Exception Dialog unicode %p Msg %d pti %p Wndpti %p\n",WndProc, Msg,GetW32ThreadInfo(),pWnd->head.pti);
+         ERR("Exception when calling unicode WndProc %p Msg %d pti %p Wndpti %p\n",WndProc, Msg,GetW32ThreadInfo(),pWnd->head.pti);
       }
       _SEH2_END;
-      }
 
       if (Hook && (MsgOverride || DlgOverride))
       {
@@ -1543,6 +1534,7 @@ IntCallWindowProcW(BOOL IsAnsiProc,
          }
          _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
          {
+            ERR("Got exception in hooked PostWndProc, dlg:%d!\n", DlgOverride);
          }
          _SEH2_END;
       }
@@ -1603,26 +1595,22 @@ IntCallWindowProcA(BOOL IsAnsiProc,
          }
          _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
          {
+            ERR("Got exception in hooked PreWndProc, dlg:%d!\n", DlgOverride);
          }
          _SEH2_END;
       }
 
       if (PreResult) goto Exit;
 
-      if (!Dialog)
-      Result = CALL_EXTERN_WNDPROC(WndProc, hWnd, Msg, wParam, lParam);
-      else
-      {
       _SEH2_TRY
       {
          Result = CALL_EXTERN_WNDPROC(WndProc, hWnd, Msg, wParam, lParam);
       }
       _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
       {
-         ERR("Exception Dialog Ansi %p Msg %d pti %p Wndpti %p\n",WndProc,Msg,GetW32ThreadInfo(),pWnd->head.pti);
+         ERR("Exception when calling Ansi WndProc %p Msg %d pti %p Wndpti %p\n",WndProc,Msg,GetW32ThreadInfo(),pWnd->head.pti);
       }
       _SEH2_END;
-      }
 
       if (Hook && (MsgOverride || DlgOverride))
       {
@@ -1635,6 +1623,7 @@ IntCallWindowProcA(BOOL IsAnsiProc,
          }
          _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
          {
+            ERR("Got exception in hooked PostWndProc, dlg:%d!\n", DlgOverride);
          }
          _SEH2_END;
       }
@@ -1664,26 +1653,22 @@ IntCallWindowProcA(BOOL IsAnsiProc,
          }
          _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
          {
+            ERR("Got exception in hooked PreWndProc, dlg:%d!\n", DlgOverride);
          }
          _SEH2_END;
       }
 
       if (PreResult) goto Exit;
 
-      if (!Dialog)
-      Result = CALL_EXTERN_WNDPROC(WndProc, UnicodeMsg.hwnd, UnicodeMsg.message, UnicodeMsg.wParam, UnicodeMsg.lParam);
-      else
-      {
       _SEH2_TRY
       {
          Result = CALL_EXTERN_WNDPROC(WndProc, UnicodeMsg.hwnd, UnicodeMsg.message, UnicodeMsg.wParam, UnicodeMsg.lParam);
       }
       _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
       {
-         ERR("Exception Dialog unicode %p Msg %d pti %p Wndpti %p\n",WndProc, Msg,GetW32ThreadInfo(),pWnd->head.pti);
+         ERR("Exception when calling unicode WndProc %p Msg %d pti %p Wndpti %p\n",WndProc, Msg,GetW32ThreadInfo(),pWnd->head.pti);
       }
       _SEH2_END;
-      }
 
       if (Hook && (MsgOverride || DlgOverride))
       {
@@ -1696,6 +1681,7 @@ IntCallWindowProcA(BOOL IsAnsiProc,
          }
          _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
          {
+            ERR("Got exception in hooked PostWndProc, dlg:%d!\n", DlgOverride);
          }
          _SEH2_END;
       }
@@ -1872,7 +1858,6 @@ DispatchMessageA(CONST MSG *lpmsg)
     LRESULT Ret = 0;
     MSG UnicodeMsg;
     PWND Wnd;
-    BOOL Hit = FALSE;
 
     if ( lpmsg->message & ~WM_MAXIMUM )
     {
@@ -1916,7 +1901,7 @@ DispatchMessageA(CONST MSG *lpmsg)
        }
        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
        {
-           Hit = TRUE;
+           ERR("Exception in Timer Callback!\n");
        }
        _SEH2_END;
     }
@@ -1947,10 +1932,6 @@ DispatchMessageA(CONST MSG *lpmsg)
        }
     }
 
-    if (Hit)
-    {
-       WARN("Exception in Timer Callback WndProcA!\n");
-    }
     return Ret;
 }
 
@@ -2586,7 +2567,7 @@ SendMessageTimeoutA(
   UINT uTimeout,
   PDWORD_PTR lpdwResult)
 {
-  MSG AnsiMsg, UcMsg;
+  MSG AnsiMsg, UcMsg, KMMsg;
   LRESULT Result;
   DOSENDMESSAGE dsm;
 
@@ -2617,14 +2598,21 @@ SendMessageTimeoutA(
       return FALSE;
   }
 
+  if (!MsgiUMToKMMessage(&UcMsg, &KMMsg, FALSE))
+  {
+      MsgiAnsiToUnicodeCleanup(&UcMsg, &AnsiMsg);
+      return FALSE;
+  }
+
   Result = NtUserMessageCall( hWnd,
-                              UcMsg.message,
-                              UcMsg.wParam,
-                              UcMsg.lParam,
+                              KMMsg.message,
+                              KMMsg.wParam,
+                              KMMsg.lParam,
                              (ULONG_PTR)&dsm,
                               FNID_SENDMESSAGEWTOOPTION,
                               TRUE);
 
+  MsgiUMToKMCleanup(&UcMsg, &KMMsg);
   MsgiAnsiToUnicodeReply(&UcMsg, &AnsiMsg, &Result);
 
   if (lpdwResult) *lpdwResult = dsm.Result;
@@ -2651,6 +2639,7 @@ SendMessageTimeoutW(
 {
   LRESULT Result;
   DOSENDMESSAGE dsm;
+  MSG UMMsg, KMMsg;
 
   if ( Msg & ~WM_MAXIMUM || fuFlags & ~(SMTO_NOTIMEOUTIFNOTHUNG|SMTO_ABORTIFHUNG|SMTO_BLOCK))
   {
@@ -2666,13 +2655,27 @@ SendMessageTimeoutW(
   dsm.uTimeout = uTimeout;
   dsm.Result = 0;
 
+  UMMsg.hwnd = hWnd;
+  UMMsg.message = Msg;
+  UMMsg.wParam = wParam;
+  UMMsg.lParam = lParam;
+  UMMsg.time = 0;
+  UMMsg.pt.x = 0;
+  UMMsg.pt.y = 0;
+  if (! MsgiUMToKMMessage(&UMMsg, &KMMsg, TRUE))
+  {
+     return FALSE;
+  }
+
   Result = NtUserMessageCall( hWnd,
-                              Msg,
-                              wParam,
-                              lParam,
+                              KMMsg.message,
+                              KMMsg.wParam,
+                              KMMsg.lParam,
                              (ULONG_PTR)&dsm,
                               FNID_SENDMESSAGEWTOOPTION,
                               FALSE);
+
+  MsgiUMToKMCleanup(&UMMsg, &KMMsg);
 
   if (lpdwResult) *lpdwResult = dsm.Result;
 
@@ -2730,7 +2733,6 @@ SendNotifyMessageW(
   WPARAM wParam,
   LPARAM lParam)
 {
-  MSG UMMsg, KMMsg;
   LRESULT Result;
 
   if (is_pointer_message(Msg))
@@ -2739,26 +2741,13 @@ SendNotifyMessageW(
      return FALSE;
   }
 
-  UMMsg.hwnd = hWnd;
-  UMMsg.message = Msg;
-  UMMsg.wParam = wParam;
-  UMMsg.lParam = lParam;
-  UMMsg.time = 0;
-  UMMsg.pt.x = 0;
-  UMMsg.pt.y = 0;
-  if (! MsgiUMToKMMessage(&UMMsg, &KMMsg, TRUE))
-  {
-     return FALSE;
-  }
   Result = NtUserMessageCall( hWnd,
-                              KMMsg.message,
-                              KMMsg.wParam,
-                              KMMsg.lParam,
+                              Msg,
+                              wParam,
+                              lParam,
                               0,
                               FNID_SENDNOTIFYMESSAGE,
                               FALSE);
-
-  MsgiUMToKMCleanup(&UMMsg, &KMMsg);
 
   return Result;
 }

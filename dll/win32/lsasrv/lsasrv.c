@@ -271,9 +271,8 @@ LsaIFree_LSAPR_TRANSLATED_SIDS(
 NTSTATUS WINAPI
 LsapInitLsa(VOID)
 {
-    HANDLE hEvent;
-    DWORD dwError;
     NTSTATUS Status;
+    BOOLEAN PrivilegeEnabled;
 
     TRACE("LsapInitLsa() called\n");
 
@@ -294,6 +293,9 @@ LsapInitLsa(VOID)
     /* Initialize logon sessions */
     LsapInitLogonSessions();
 
+    /* Initialize the notification list */
+    LsapInitNotificationList();
+
     /* Initialize registered authentication packages */
     Status = LsapInitAuthPackages();
     if (!NT_SUCCESS(Status))
@@ -302,7 +304,14 @@ LsapInitLsa(VOID)
         return Status;
     }
 
-    /* Start the authentication port thread */
+    /* Enable the token creation privilege for the rest of our lifetime */
+    Status = RtlAdjustPrivilege(SE_CREATE_TOKEN_PRIVILEGE, TRUE, FALSE, &PrivilegeEnabled);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("RtlAdjustPrivilege(SE_CREATE_TOKEN_PRIVILEGE) failed, ignoring (Status 0x%08lx)\n", Status);
+    }
+
+    /* Start the authentication LPC port thread */
     Status = StartAuthenticationPort();
     if (!NT_SUCCESS(Status))
     {
@@ -311,36 +320,12 @@ LsapInitLsa(VOID)
     }
 
     /* Start the RPC server */
-    LsarStartRpcServer();
-
-    TRACE("Creating notification event!\n");
-    /* Notify the service manager */
-    hEvent = CreateEventW(NULL,
-                          TRUE,
-                          FALSE,
-                          L"LSA_RPC_SERVER_ACTIVE");
-    if (hEvent == NULL)
+    Status = LsarStartRpcServer();
+    if (!NT_SUCCESS(Status))
     {
-        dwError = GetLastError();
-        TRACE("Failed to create the notification event (Error %lu)\n", dwError);
-
-        if (dwError == ERROR_ALREADY_EXISTS)
-        {
-            hEvent = OpenEventW(GENERIC_WRITE,
-                                FALSE,
-                                L"LSA_RPC_SERVER_ACTIVE");
-            if (hEvent == NULL)
-            {
-               ERR("Could not open the notification event (Error %lu)\n", GetLastError());
-               return STATUS_UNSUCCESSFUL;
-            }
-        }
+        ERR("LsarStartRpcServer() failed (Status 0x%08lx)\n", Status);
+        return Status;
     }
-
-    TRACE("Set notification event!\n");
-    SetEvent(hEvent);
-
-    /* NOTE: Do not close the event handle!!!! */
 
     return STATUS_SUCCESS;
 }

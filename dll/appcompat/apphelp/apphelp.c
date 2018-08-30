@@ -1,21 +1,10 @@
 /*
- * Copyright 2011 André Hentschel
- * Copyright 2013 Mislav Blažević
- * Copyright 2015-2017 Mark Jansen (mark.jansen@reactos.org)
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+ * PROJECT:     ReactOS Application compatibility module
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     apphelp entrypoint / generic interface functions
+ * COPYRIGHT:   Copyright 2011 André Hentschel
+ *              Copyright 2013 Mislav Blaževic
+ *              Copyright 2015-2018 Mark Jansen (mark.jansen@reactos.org)
  */
 
 #define WIN32_NO_STATUS
@@ -53,7 +42,7 @@ void ApphelppInitDebugLevel(void)
     if (NT_SUCCESS(Status))
     {
         if (!NT_SUCCESS(RtlUnicodeStringToInteger(&DebugValue, 10, &NewLevel)))
-            NewLevel = 0;
+            NewLevel = SHIM_ERR;
     }
     g_ShimDebugLevel = NewLevel;
 }
@@ -63,10 +52,6 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
 {
     switch (reason)
     {
-#ifndef __REACTOS__
-        case DLL_WINE_PREATTACH:
-            return FALSE;    /* prefer native version */
-#endif
         case DLL_PROCESS_ATTACH:
             g_hInstance = hinst;
             DisableThreadLibraryCalls( hinst );
@@ -254,5 +239,4 @@ ApphelpCheckRunAppEx(
     /* We should _ALWAYS_ return TRUE here, unless we want to block an application from starting! */
     return TRUE;
 }
-
 

@@ -1382,7 +1382,7 @@ Phase1InitializationDiscard(IN PVOID Context)
 
     /* Setup the boot driver */
     InbvEnableBootDriver(!NoGuiBoot);
-    InbvDriverInitialize(LoaderBlock, 18);
+    InbvDriverInitialize(LoaderBlock, IDB_MAX_RESOURCE);
 
     /* Check if GUI boot is enabled */
     if (!NoGuiBoot)
@@ -1428,15 +1428,12 @@ Phase1InitializationDiscard(IN PVOID Context)
     if (CmCSDVersionString.Length)
     {
         /* Print the version string */
-        /* ReactOS specific: Append also the revision number */
         Status = RtlStringCbPrintfExA(StringBuffer,
                                       Remaining,
                                       &EndBuffer,
                                       &Remaining,
                                       0,
-                                      " r%u"
                                       ": %wZ",
-                                      KERNEL_VERSION_BUILD_HEX,
                                       &CmCSDVersionString);
         if (!NT_SUCCESS(Status))
         {
@@ -1471,9 +1468,12 @@ Phase1InitializationDiscard(IN PVOID Context)
     if (NT_SUCCESS(MsgStatus))
     {
         /* Create the banner message */
+        /* ReactOS specific: Report ReactOS version, NtBuildLab information and reported NT kernel version */
         Status = RtlStringCbPrintfA(EndBuffer,
                                     Remaining,
                                     (PCHAR)MsgEntry->Text,
+                                    KERNEL_VERSION_STR,
+                                    NtBuildLab,
                                     StringBuffer,
                                     NtBuildNumber & 0xFFFF,
                                     BeginBuffer);
@@ -1501,7 +1501,7 @@ Phase1InitializationDiscard(IN PVOID Context)
     if (!PoInitSystem(0)) KeBugCheck(INTERNAL_POWER_ERROR);
 
     /* Check for Y2K hack */
-    Y2KHackRequired = strstr(CommandLine, "YEAR");
+    Y2KHackRequired = CommandLine ? strstr(CommandLine, "YEAR") : NULL;
     if (Y2KHackRequired) Y2KHackRequired = strstr(Y2KHackRequired, "=");
     if (Y2KHackRequired) YearHack = atol(Y2KHackRequired + 1);
 
@@ -1580,8 +1580,9 @@ Phase1InitializationDiscard(IN PVOID Context)
                                WINDOWS_NT_INFO_STRING,
                                &MsgEntry);
 
-    /* Get total RAM size */
-    Size = MmNumberOfPhysicalPages * PAGE_SIZE / 1024 / 1024;
+    /* Get total RAM size, in MiB */
+    /* Round size up. Assumed to better match actual physical RAM size */
+    Size = ALIGN_UP_BY(MmNumberOfPhysicalPages * PAGE_SIZE, 1024 * 1024) / (1024 * 1024);
 
     /* Create the string */
     StringBuffer = InitBuffer->VersionBuffer;
@@ -1589,7 +1590,7 @@ Phase1InitializationDiscard(IN PVOID Context)
                                 sizeof(InitBuffer->VersionBuffer),
                                 NT_SUCCESS(MsgStatus) ?
                                 (PCHAR)MsgEntry->Text :
-                                "%u System Processor [%u MB Memory] %Z\r\n",
+                                "%u System Processor [%Iu MB Memory] %Z\r\n",
                                 KeNumberProcessors,
                                 Size,
                                 &TempString);

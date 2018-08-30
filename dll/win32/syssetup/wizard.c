@@ -16,6 +16,8 @@
 #include <time.h>
 #include <winnls.h>
 #include <windowsx.h>
+#include <wincon.h>
+#include <shlobj.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -244,7 +246,7 @@ WelcomeDlgProc(HWND hwndDlg,
                     PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_NEXT);
                     if (pSetupData->UnattendSetup)
                     {
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, IDD_ACKPAGE);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, IDD_ACKPAGE);
                         return TRUE;
                     }
                     break;
@@ -356,7 +358,7 @@ AckPageDlgProc(HWND hwndDlg,
                     PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
                     if (pSetupData->UnattendSetup)
                     {
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, IDD_LOCALEPAGE);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, IDD_LOCALEPAGE);
                         return TRUE;
                     }
                     break;
@@ -478,7 +480,7 @@ OwnerPageDlgProc(HWND hwndDlg,
                         SendMessage(GetDlgItem(hwndDlg, IDC_OWNERORGANIZATION), WM_SETTEXT, 0, (LPARAM)pSetupData->OwnerOrganization);
                         if (WriteOwnerSettings(pSetupData->OwnerName, pSetupData->OwnerOrganization))
                         {
-                            SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, IDD_COMPUTERPAGE);
+                            SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, IDD_COMPUTERPAGE);
                             return TRUE;
                         }
                     }
@@ -499,7 +501,7 @@ OwnerPageDlgProc(HWND hwndDlg,
                         MessageBoxW(hwndDlg, ErrorName, Title, MB_ICONERROR | MB_OK);
 
                         SetFocus(GetDlgItem(hwndDlg, IDC_OWNERNAME));
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, -1);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, -1);
 
                         return TRUE;
                     }
@@ -510,7 +512,7 @@ OwnerPageDlgProc(HWND hwndDlg,
                     if (!WriteOwnerSettings(OwnerName, OwnerOrganization))
                     {
                         SetFocus(GetDlgItem(hwndDlg, IDC_OWNERNAME));
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, -1);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, -1);
                         return TRUE;
                     }
 
@@ -592,14 +594,14 @@ WriteDefaultLogonData(LPWSTR Domain)
         return FALSE;
 
     lError = RegSetValueEx(hKey,
-                           L"DefaultDomain",
+                           L"DefaultDomainName",
                            0,
                            REG_SZ,
                            (LPBYTE)Domain,
                            (wcslen(Domain)+ 1) * sizeof(WCHAR));
     if (lError != ERROR_SUCCESS)
     {
-        DPRINT1("RegSetValueEx(\"DefaultDomain\") failed!\n");
+        DPRINT1("RegSetValueEx(\"DefaultDomainName\") failed!\n");
     }
 
     lError = RegSetValueEx(hKey,
@@ -704,7 +706,7 @@ ComputerPageDlgProc(HWND hwndDlg,
                     PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
                     if (pSetupData->UnattendSetup && WriteComputerSettings(pSetupData->ComputerName, hwndDlg))
                     {
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, IDD_DATETIMEPAGE);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, IDD_THEMEPAGE);
                         return TRUE;
                     }
                     break;
@@ -719,7 +721,7 @@ ComputerPageDlgProc(HWND hwndDlg,
                         }
                         MessageBoxW(hwndDlg, EmptyComputerName, Title, MB_ICONERROR | MB_OK);
                         SetFocus(GetDlgItem(hwndDlg, IDC_COMPUTERNAME));
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, -1);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, -1);
                         return TRUE;
                     }
 
@@ -729,7 +731,7 @@ ComputerPageDlgProc(HWND hwndDlg,
                     if (!WriteComputerSettings(ComputerName, hwndDlg))
                     {
                         SetFocus(GetDlgItem(hwndDlg, IDC_COMPUTERNAME));
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, -1);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, -1);
                         return TRUE;
                     }
 
@@ -744,7 +746,7 @@ ComputerPageDlgProc(HWND hwndDlg,
                             wcscpy(EmptyPassword, L"You must enter a password !");
                         }
                         MessageBoxW(hwndDlg, EmptyPassword, Title, MB_ICONERROR | MB_OK);
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, -1);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, -1);
                         return TRUE;
                     }
 #else
@@ -760,7 +762,7 @@ ComputerPageDlgProc(HWND hwndDlg,
                             wcscpy(NotMatchPassword, L"The passwords you entered do not match. Please enter the desired password again.");
                         }
                         MessageBoxW(hwndDlg, NotMatchPassword, Title, MB_ICONERROR | MB_OK);
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, -1);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, -1);
                         return TRUE;
                     }
 
@@ -776,7 +778,7 @@ ComputerPageDlgProc(HWND hwndDlg,
                                 wcscpy(WrongPassword, L"The password you entered contains invalid characters. Please enter a cleaned password.");
                             }
                             MessageBoxW(hwndDlg, WrongPassword, Title, MB_ICONERROR | MB_OK);
-                            SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, -1);
+                            SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, -1);
                             return TRUE;
                         }
                         Password++;
@@ -941,7 +943,7 @@ LocalePageDlgProc(HWND hwndDlg,
     PSETUPDATA SetupData;
 
     /* Retrieve pointer to the global setup data */
-    SetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    SetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
@@ -949,7 +951,7 @@ LocalePageDlgProc(HWND hwndDlg,
         {
             /* Save pointer to the global setup data */
             SetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)SetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)SetupData);
             WriteUserLocale();
 
             SetKeyboardLayoutName(GetDlgItem(hwndDlg, IDC_LAYOUTTEXT));
@@ -996,7 +998,7 @@ LocalePageDlgProc(HWND hwndDlg,
                             RunControlPanelApplet(hwndDlg, L"intl.cpl,,/f:\"unattend.inf\"");
                         }
 
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, IDD_OWNERPAGE);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, IDD_OWNERPAGE);
                         return TRUE;
                     }
                     break;
@@ -1527,14 +1529,14 @@ DateTimePageDlgProc(HWND hwndDlg,
     PSETUPDATA SetupData;
 
     /* Retrieve pointer to the global setup data */
-    SetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    SetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
         case WM_INITDIALOG:
             /* Save pointer to the global setup data */
             SetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)SetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)SetupData);
 
             CreateTimeZoneList(SetupData);
 
@@ -1569,7 +1571,7 @@ DateTimePageDlgProc(HWND hwndDlg,
                     PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
                     if (SetupData->UnattendSetup && WriteDateTimeSettings(hwndDlg, SetupData))
                     {
-                        SetWindowLongPtr(hwndDlg, DWL_MSGRESULT, SetupData->uFirstNetworkWizardPage);
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, SetupData->uFirstNetworkWizardPage);
                         return TRUE;
                     }
                     SetTimer(hwndDlg, 1, 1000, NULL);
@@ -1604,6 +1606,89 @@ DateTimePageDlgProc(HWND hwndDlg,
     return FALSE;
 }
 
+
+static INT_PTR CALLBACK
+ThemePageDlgProc(HWND hwndDlg,
+                    UINT uMsg,
+                    WPARAM wParam,
+                    LPARAM lParam)
+{
+    PSETUPDATA SetupData;
+
+    /* Retrieve pointer to the global setup data */
+    SetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
+
+    switch (uMsg)
+    {
+        case WM_INITDIALOG:
+        {
+            BUTTON_IMAGELIST imldata = {0, {0,10,0,10}, BUTTON_IMAGELIST_ALIGN_TOP};
+
+            /* Save pointer to the global setup data */
+            SetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)SetupData);
+
+            imldata.himl = ImageList_LoadImage(hDllInstance, MAKEINTRESOURCE(IDB_CLASSIC), 0, 0, 0x00FF00FF, IMAGE_BITMAP, LR_CREATEDIBSECTION);
+            SendDlgItemMessage(hwndDlg, IDC_CLASSICSTYLE, BCM_SETIMAGELIST, 0, (LPARAM)&imldata);
+
+            imldata.himl = ImageList_LoadImage(hDllInstance, MAKEINTRESOURCE(IDB_LAUTUS), 0, 0, 0x00FF00FF , IMAGE_BITMAP, LR_CREATEDIBSECTION);
+            SendDlgItemMessage(hwndDlg, IDC_THEMEDSTYLE, BCM_SETIMAGELIST, 0, (LPARAM)&imldata);
+
+            SendDlgItemMessage(hwndDlg, IDC_CLASSICSTYLE, BM_SETCHECK, BST_CHECKED, 0);
+            break;
+        }
+        case WM_COMMAND:
+            if (HIWORD(wParam) == BN_CLICKED)
+            {
+                switch (LOWORD(wParam))
+                {
+                    case IDC_THEMEDSTYLE:
+                    {
+                        WCHAR wszParams[1024];
+                        WCHAR wszTheme[MAX_PATH];
+                        WCHAR* format = L"desk.cpl desk,@Appearance /Action:ActivateMSTheme /file:\"%s\"";
+
+                        SHGetFolderPathAndSubDirW(0, CSIDL_RESOURCES, NULL, SHGFP_TYPE_DEFAULT, L"themes\\lautus\\lautus.msstyles", wszTheme);
+                        swprintf(wszParams, format, wszTheme);
+                        RunControlPanelApplet(hwndDlg, wszParams);
+                        break;
+                    }
+                    case IDC_CLASSICSTYLE:
+                        RunControlPanelApplet(hwndDlg, L"desk.cpl desk,@Appearance /Action:ActivateMSTheme");
+                        break;
+                }
+            }
+        case WM_NOTIFY:
+            switch (((LPNMHDR)lParam)->code)
+            {
+                case PSN_SETACTIVE:
+                    /* Enable the Back and Next buttons */
+                    PropSheet_SetWizButtons(GetParent(hwndDlg), PSWIZB_BACK | PSWIZB_NEXT);
+                    if (SetupData->UnattendSetup)
+                    {
+                        SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, SetupData->uFirstNetworkWizardPage);
+                        return TRUE;
+                    }
+                    break;
+
+                case PSN_WIZNEXT:
+                    break;
+
+                case PSN_WIZBACK:
+                    SetupData->UnattendSetup = FALSE;
+                    break;
+
+                default:
+                    break;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    return FALSE;
+}
 
 static UINT CALLBACK
 RegistrationNotificationProc(PVOID Context,
@@ -1878,7 +1963,7 @@ ProcessPageDlgProc(HWND hwndDlg,
     WCHAR Title[64];
 
     /* Retrieve pointer to the global setup data */
-    SetupData = (PSETUPDATA)GetWindowLongPtr (hwndDlg, GWL_USERDATA);
+    SetupData = (PSETUPDATA)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
     switch (uMsg)
     {
@@ -1886,7 +1971,7 @@ ProcessPageDlgProc(HWND hwndDlg,
         {
             /* Save pointer to the global setup data */
             SetupData = (PSETUPDATA)((LPPROPSHEETPAGE)lParam)->lParam;
-            SetWindowLongPtr(hwndDlg, GWL_USERDATA, (DWORD_PTR)SetupData);
+            SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (DWORD_PTR)SetupData);
         }
         break;
 
@@ -2418,7 +2503,7 @@ InstallWizard(VOID)
     PSETUPDATA pSetupData = NULL;
     HMODULE hNetShell = NULL;
     PFNREQUESTWIZARDPAGES pfn = NULL;
-    DWORD dwPageCount = 8, dwNetworkPageCount = 0;
+    DWORD dwPageCount = 9, dwNetworkPageCount = 0;
 
     LogItem(L"BEGIN_SECTION", L"InstallWizard");
 
@@ -2519,6 +2604,13 @@ InstallWizard(VOID)
     psp.pszTemplate = MAKEINTRESOURCE(IDD_DATETIMEPAGE);
     phpage[nPages++] = CreatePropertySheetPage(&psp);
 
+    /* Create the theme selection page */
+    psp.dwFlags = PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
+    psp.pszHeaderTitle = MAKEINTRESOURCE(IDS_THEMESELECTIONTITLE);
+    psp.pszHeaderSubTitle = MAKEINTRESOURCE(IDS_THEMESELECTIONSUBTITLE);
+    psp.pfnDlgProc = ThemePageDlgProc;
+    psp.pszTemplate = MAKEINTRESOURCE(IDD_THEMEPAGE);
+    phpage[nPages++] = CreatePropertySheetPage(&psp);
 
     pSetupData->uFirstNetworkWizardPage = IDD_PROCESSPAGE;
     pSetupData->uPostNetworkWizardPage = IDD_PROCESSPAGE;
@@ -2543,6 +2635,8 @@ InstallWizard(VOID)
     psp.pfnDlgProc = FinishDlgProc;
     psp.pszTemplate = MAKEINTRESOURCE(IDD_FINISHPAGE);
     phpage[nPages++] = CreatePropertySheetPage(&psp);
+
+    ASSERT(nPages == dwPageCount);
 
     /* Create the property sheet */
     psh.dwSize = sizeof(PROPSHEETHEADER);

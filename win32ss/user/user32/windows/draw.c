@@ -6,6 +6,7 @@
  * Copyright 2003 Andrew Greenwood
  * Copyright 2003 Filip Navara
  * Copyright 2009 Matthias Kupfer
+ * Copyright 2017 Katayama Hirofumi MZ
  *
  * Based on Wine code.
  *
@@ -27,11 +28,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/* INCLUDES *******************************************************************/
-
 #include <user32.h>
-
-#include <wine/debug.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(user32);
 
@@ -1242,6 +1239,8 @@ IntDrawState(HDC hdc, HBRUSH hbr, DRAWSTATEPROC func, LPARAM lp, WPARAM wp,
     UINT opcode = flags & 0xf;
     INT len = wp;
     BOOL retval, tmp;
+    LOGFONTW lf;
+    HFONT hFontOriginal, hNaaFont = NULL;
 
     if((opcode == DST_TEXT || opcode == DST_PREFIXTEXT) && !len)    /* The string is '\0' terminated */
     {
@@ -1249,6 +1248,15 @@ IntDrawState(HDC hdc, HBRUSH hbr, DRAWSTATEPROC func, LPARAM lp, WPARAM wp,
             len = lstrlenW((LPWSTR)lp);
         else
             len = lstrlenA((LPSTR)lp);
+    }
+
+    hFontOriginal = GetCurrentObject(hdc, OBJ_FONT);
+    if (flags & (DSS_MONO | DSS_DISABLED))
+    {
+        /* Create a non-antialiased font */
+        GetObjectW(hFontOriginal, sizeof(lf), &lf);
+        lf.lfQuality = NONANTIALIASED_QUALITY;
+        hNaaFont = CreateFontIndirectW(&lf);
     }
 
     /* Find out what size the image has if not given by caller */
@@ -1332,7 +1340,10 @@ IntDrawState(HDC hdc, HBRUSH hbr, DRAWSTATEPROC func, LPARAM lp, WPARAM wp,
     if(!FillRect(memdc, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH))) goto cleanup;
     SetBkColor(memdc, RGB(255, 255, 255));
     SetTextColor(memdc, RGB(0, 0, 0));
-    hfsave  = (HFONT)SelectObject(memdc, GetCurrentObject(hdc, OBJ_FONT));
+    if (hNaaFont)
+        hfsave  = (HFONT)SelectObject(memdc, hNaaFont);
+    else
+        hfsave  = (HFONT)SelectObject(memdc, hFontOriginal);
     SetLayout( memdc, GetLayout( hdc ));
 
     /* DST_COMPLEX may draw text as well,
@@ -1341,6 +1352,7 @@ IntDrawState(HDC hdc, HBRUSH hbr, DRAWSTATEPROC func, LPARAM lp, WPARAM wp,
     if(!hfsave && (opcode <= DST_PREFIXTEXT)) goto cleanup;
     tmp = PAINTING_DrawStateJam(memdc, opcode, func, lp, len, &rc, dtflags, unicode);
     if(hfsave) SelectObject(memdc, hfsave);
+    if (hNaaFont) DeleteObject(hNaaFont);
     if(!tmp) goto cleanup;
 
     /* This state cause the image to be dithered */
@@ -1442,6 +1454,7 @@ DrawFrameControl(HDC hDC, LPRECT rc, UINT uType, UINT uState)
    }
    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
    {
+       ERR("Got exception in hooked DrawFrameControl!\n");
    }
    _SEH2_END;
 

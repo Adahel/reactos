@@ -619,14 +619,6 @@ IntDefWindowProc(
          if (!Wnd->spwndOwner) break;
          if (LOWORD(lParam))
          {
-            if (wParam)
-            {
-               if (!(Wnd->state & WNDS_HIDDENPOPUP)) break;
-               Wnd->state &= ~WNDS_HIDDENPOPUP;
-            }
-            else
-                Wnd->state |= WNDS_HIDDENPOPUP;
-
             co_WinPosShowWindow(Wnd, wParam ? SW_SHOWNOACTIVATE : SW_HIDE);
          }
          break;
@@ -967,7 +959,7 @@ IntDefWindowProc(
          if (!hBrush) return 0;
          if (hBrush <= (HBRUSH)COLOR_MENUBAR)
          {
-            hBrush = IntGetSysColorBrush((INT)hBrush);
+            hBrush = IntGetSysColorBrush(HandleToUlong(hBrush));
          }
          if (Wnd->pcls->style & CS_PARENTDC)
          {

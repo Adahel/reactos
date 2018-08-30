@@ -19,9 +19,10 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <assert.h>
 #include "dmusic_private.h"
 
-#include <assert.h>
+WINE_DEFAULT_DEBUG_CHANNEL(dmusic);
 
 typedef struct SynthPortImpl {
     IDirectMusicPort IDirectMusicPort_iface;
@@ -509,7 +510,7 @@ static HRESULT WINAPI synth_dmport_SetDirectSound(IDirectMusicPort *iface, IDire
             This->parent->dsound = NULL;
     }
     if (This->dsbuffer)
-        IDirectSound_Release(This->dsbuffer);
+        IDirectSoundBuffer_Release(This->dsbuffer);
 
     This->dsound = dsound;
     This->dsbuffer = dsbuffer;
@@ -517,7 +518,7 @@ static HRESULT WINAPI synth_dmport_SetDirectSound(IDirectMusicPort *iface, IDire
     if (This->dsound)
         IDirectSound_AddRef(This->dsound);
     if (This->dsbuffer)
-        IDirectSound_AddRef(This->dsbuffer);
+        IDirectSoundBuffer_AddRef(This->dsbuffer);
 
     return S_OK;
 }

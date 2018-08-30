@@ -25,7 +25,23 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "precomp.h"
+#include "config.h"
+
+#include <string.h>
+#include <stdlib.h>
+#include <stdarg.h>
+
+#define COBJMACROS
+#define NONAMELESSUNION
+#define NONAMELESSSTRUCT
+
+#include "windef.h"
+#include "winbase.h"
+#include "wine/unicode.h"
+#include "winerror.h"
+#include "variant.h"
+#include "resource.h"
+#include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(variant);
 
@@ -497,6 +513,22 @@ static inline HRESULT VARIANT_CoerceArray(VARIANTARG* pd, VARIANTARG* ps, VARTYP
     return SafeArrayCopy(V_ARRAY(ps), &V_ARRAY(pd));
 
   return DISP_E_TYPEMISMATCH;
+}
+
+static HRESULT VARIANT_FetchDispatchValue(LPVARIANT pvDispatch, LPVARIANT pValue)
+{
+    HRESULT hres;
+    static DISPPARAMS emptyParams = { NULL, NULL, 0, 0 };
+
+    if ((V_VT(pvDispatch) & VT_TYPEMASK) == VT_DISPATCH) {
+        if (NULL == V_DISPATCH(pvDispatch)) return DISP_E_TYPEMISMATCH;
+        hres = IDispatch_Invoke(V_DISPATCH(pvDispatch), DISPID_VALUE, &IID_NULL,
+            LOCALE_USER_DEFAULT, DISPATCH_PROPERTYGET, &emptyParams, pValue,
+            NULL, NULL);
+    } else {
+        hres = DISP_E_TYPEMISMATCH;
+    }
+    return hres;
 }
 
 /******************************************************************************
@@ -2129,7 +2161,7 @@ HRESULT WINAPI VarNumFromParseNum(NUMPARSE *pNumprs, BYTE *rgbDig,
         multiplier10, divisor10);
 
   if (dwVtBits & (INTEGER_VTBITS|VTBIT_DECIMAL) &&
-      (!fractionalDigits || !(dwVtBits & (REAL_VTBITS|VTBIT_CY|VTBIT_DECIMAL))))
+      (!fractionalDigits || !(dwVtBits & (REAL_VTBITS|VTBIT_DECIMAL))))
   {
     /* We have one or more integer output choices, and either:
      *  1) An integer input value, or
@@ -2243,7 +2275,7 @@ HRESULT WINAPI VarNumFromParseNum(NUMPARSE *pNumprs, BYTE *rgbDig,
           V_I8(pVarDst) = -ul64;
           return S_OK;
         }
-        else if ((dwVtBits & REAL_VTBITS) == VTBIT_DECIMAL)
+        else if ((dwVtBits & (REAL_VTBITS|VTBIT_DECIMAL)) == VTBIT_DECIMAL)
         {
           /* Decimal is only output choice left - fast path */
           V_VT(pVarDst) = VT_DECIMAL;
@@ -2305,7 +2337,7 @@ HRESULT WINAPI VarNumFromParseNum(NUMPARSE *pNumprs, BYTE *rgbDig,
         V_UI8(pVarDst) = ul64;
         return S_OK;
       }
-      else if ((dwVtBits & REAL_VTBITS) == VTBIT_DECIMAL)
+      else if ((dwVtBits & (REAL_VTBITS|VTBIT_DECIMAL)) == VTBIT_DECIMAL)
       {
         /* Decimal is only output choice left - fast path */
         V_VT(pVarDst) = VT_DECIMAL;
@@ -2360,8 +2392,8 @@ HRESULT WINAPI VarNumFromParseNum(NUMPARSE *pNumprs, BYTE *rgbDig,
     {
       if (whole < dblMinimums[10] && whole != 0)
       {
-        dwVtBits &= ~(VTBIT_R4|VTBIT_R8|VTBIT_CY); /* Underflow */
-        bOverflow = TRUE;
+        whole = 0; /* ignore underflow */
+        divisor10 = 0;
         break;
       }
       whole = whole / dblMultipliers[10];
@@ -2371,8 +2403,8 @@ HRESULT WINAPI VarNumFromParseNum(NUMPARSE *pNumprs, BYTE *rgbDig,
     {
       if (whole < dblMinimums[divisor10] && whole != 0)
       {
-        dwVtBits &= ~(VTBIT_R4|VTBIT_R8|VTBIT_CY); /* Underflow */
-        bOverflow = TRUE;
+        whole = 0; /* ignore underflow */
+        divisor10 = 0;
       }
       else
         whole = whole / dblMultipliers[divisor10];
@@ -2485,13 +2517,14 @@ VarNumFromParseNum_DecOverflow:
  */
 HRESULT WINAPI VarCat(LPVARIANT left, LPVARIANT right, LPVARIANT out)
 {
-    VARTYPE leftvt,rightvt,resultvt;
+    BSTR left_str = NULL, right_str = NULL;
+    VARTYPE leftvt, rightvt;
     HRESULT hres;
-    static const WCHAR sz_empty[] = {'\0'};
-    leftvt = V_VT(left);
-    rightvt = V_VT(right);
 
     TRACE("%s,%s,%p)\n", debugstr_variant(left), debugstr_variant(right), out);
+
+    leftvt = V_VT(left);
+    rightvt = V_VT(right);
 
     /* when both left and right are NULL the result is NULL */
     if (leftvt == VT_NULL && rightvt == VT_NULL)
@@ -2499,9 +2532,6 @@ HRESULT WINAPI VarCat(LPVARIANT left, LPVARIANT right, LPVARIANT out)
         V_VT(out) = VT_NULL;
         return S_OK;
     }
-
-    hres = S_OK;
-    resultvt = VT_EMPTY;
 
     /* There are many special case for errors and return types */
     if (leftvt == VT_VARIANT && (rightvt == VT_ERROR ||
@@ -2528,7 +2558,7 @@ HRESULT WINAPI VarCat(LPVARIANT left, LPVARIANT right, LPVARIANT out)
         rightvt == VT_UINT || rightvt == VT_EMPTY ||
         rightvt == VT_NULL || rightvt == VT_DATE ||
         rightvt == VT_DECIMAL || rightvt == VT_DISPATCH))
-        resultvt = VT_BSTR;
+        hres = S_OK;
     else if (rightvt == VT_ERROR && leftvt < VT_VOID)
         hres = DISP_E_TYPEMISMATCH;
     else if (leftvt == VT_ERROR && (rightvt == VT_DATE ||
@@ -2558,72 +2588,72 @@ HRESULT WINAPI VarCat(LPVARIANT left, LPVARIANT right, LPVARIANT out)
     /* if result type is not S_OK, then no need to go further */
     if (hres != S_OK)
     {
-        V_VT(out) = resultvt;
+        V_VT(out) = VT_EMPTY;
         return hres;
     }
-    /* Else proceed with formatting inputs to strings */
+
+    if (leftvt == VT_BSTR)
+        left_str = V_BSTR(left);
     else
     {
-        VARIANT bstrvar_left, bstrvar_right;
-        V_VT(out) = VT_BSTR;
+        VARIANT converted, *tmp = left;
 
-        VariantInit(&bstrvar_left);
-        VariantInit(&bstrvar_right);
-
-        /* Convert left side variant to string */
-        if (leftvt != VT_BSTR)
+        VariantInit(&converted);
+        if(leftvt == VT_DISPATCH)
         {
-            /* Fill with empty string for later concat with right side */
-            if (leftvt == VT_NULL)
-            {
-                V_VT(&bstrvar_left) = VT_BSTR;
-                V_BSTR(&bstrvar_left) = SysAllocString(sz_empty);
-            }
-            else
-            {
-                hres = VariantChangeTypeEx(&bstrvar_left,left,0,VARIANT_ALPHABOOL|VARIANT_LOCALBOOL,VT_BSTR);
-                if (hres != S_OK) {
-                    VariantClear(&bstrvar_left);
-                    VariantClear(&bstrvar_right);
-                    return hres;
-                }
-            }
+            hres = VARIANT_FetchDispatchValue(left, &converted);
+            if(FAILED(hres))
+                goto failed;
+
+            tmp = &converted;
         }
 
-        /* convert right side variant to string */
-        if (rightvt != VT_BSTR)
+        hres = VariantChangeTypeEx(&converted, tmp, 0, VARIANT_ALPHABOOL|VARIANT_LOCALBOOL, VT_BSTR);
+        if (SUCCEEDED(hres))
+            left_str = V_BSTR(&converted);
+        else if (hres != DISP_E_TYPEMISMATCH)
         {
-            /* Fill with empty string for later concat with right side */
-            if (rightvt == VT_NULL)
-            {
-                V_VT(&bstrvar_right) = VT_BSTR;
-                V_BSTR(&bstrvar_right) = SysAllocString(sz_empty);
-            }
-            else
-            {
-                hres = VariantChangeTypeEx(&bstrvar_right,right,0,VARIANT_ALPHABOOL|VARIANT_LOCALBOOL,VT_BSTR);
-                if (hres != S_OK) {
-                    VariantClear(&bstrvar_left);
-                    VariantClear(&bstrvar_right);
-                    return hres;
-                }
-            }
+            VariantClear(&converted);
+            goto failed;
         }
-
-        /* Concat the resulting strings together */
-        if (leftvt == VT_BSTR && rightvt == VT_BSTR)
-            VarBstrCat (V_BSTR(left), V_BSTR(right), &V_BSTR(out));
-        else if (leftvt != VT_BSTR && rightvt != VT_BSTR)
-            VarBstrCat (V_BSTR(&bstrvar_left), V_BSTR(&bstrvar_right), &V_BSTR(out));
-        else if (leftvt != VT_BSTR && rightvt == VT_BSTR)
-            VarBstrCat (V_BSTR(&bstrvar_left), V_BSTR(right), &V_BSTR(out));
-        else if (leftvt == VT_BSTR && rightvt != VT_BSTR)
-            VarBstrCat (V_BSTR(left), V_BSTR(&bstrvar_right), &V_BSTR(out));
-
-        VariantClear(&bstrvar_left);
-        VariantClear(&bstrvar_right);
-        return S_OK;
     }
+
+    if (rightvt == VT_BSTR)
+        right_str = V_BSTR(right);
+    else
+    {
+        VARIANT converted, *tmp = right;
+
+        VariantInit(&converted);
+        if(rightvt == VT_DISPATCH)
+        {
+            hres = VARIANT_FetchDispatchValue(right, &converted);
+            if(FAILED(hres))
+                goto failed;
+
+            tmp = &converted;
+        }
+
+        hres = VariantChangeTypeEx(&converted, tmp, 0, VARIANT_ALPHABOOL|VARIANT_LOCALBOOL, VT_BSTR);
+        if (SUCCEEDED(hres))
+            right_str = V_BSTR(&converted);
+        else if (hres != DISP_E_TYPEMISMATCH)
+        {
+            VariantClear(&converted);
+            goto failed;
+        }
+    }
+
+
+    V_VT(out) = VT_BSTR;
+    hres = VarBstrCat(left_str, right_str, &V_BSTR(out));
+
+failed:
+    if(V_VT(left) != VT_BSTR)
+        SysFreeString(left_str);
+    if(V_VT(right) != VT_BSTR)
+        SysFreeString(right_str);
+    return hres;
 }
 
 
@@ -2847,22 +2877,6 @@ HRESULT WINAPI VarCmp(LPVARIANT left, LPVARIANT right, LCID lcid, DWORD flags)
             return E_FAIL;
     }
 #undef _VARCMP
-}
-
-static HRESULT VARIANT_FetchDispatchValue(LPVARIANT pvDispatch, LPVARIANT pValue)
-{
-    HRESULT hres;
-    static DISPPARAMS emptyParams = { NULL, NULL, 0, 0 };
-
-    if ((V_VT(pvDispatch) & VT_TYPEMASK) == VT_DISPATCH) {
-        if (NULL == V_DISPATCH(pvDispatch)) return DISP_E_TYPEMISMATCH;
-        hres = IDispatch_Invoke(V_DISPATCH(pvDispatch), DISPID_VALUE, &IID_NULL,
-            LOCALE_USER_DEFAULT, DISPATCH_PROPERTYGET, &emptyParams, pValue,
-            NULL, NULL);
-    } else {
-        hres = DISP_E_TYPEMISMATCH;
-    }
-    return hres;
 }
 
 /**********************************************************************

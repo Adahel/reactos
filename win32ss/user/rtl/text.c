@@ -163,11 +163,7 @@ static void TEXT_Ellipsify (HDC hdc, WCHAR *str, unsigned int max_len,
 {
     unsigned int len_ellipsis;
     unsigned int lo, mid, hi;
-#ifdef _WIN32K_
-    len_ellipsis = wcslen (ELLIPSISW);
-#else
     len_ellipsis = strlenW (ELLIPSISW);
-#endif
     if (len_ellipsis > max_len) len_ellipsis = max_len;
     if (*len_str > max_len - len_ellipsis)
         *len_str = max_len - len_ellipsis;
@@ -274,11 +270,7 @@ static void TEXT_PathEllipsify (HDC hdc, WCHAR *str, unsigned int max_len,
     int len_trailing;
     int len_under;
     WCHAR *lastBkSlash, *lastFwdSlash, *lastSlash;
-#ifdef _WIN32K_
-    len_ellipsis = wcslen (ELLIPSISW);
-#else
     len_ellipsis = strlenW (ELLIPSISW);
-#endif
     if (!max_len) return;
     if (len_ellipsis >= max_len) len_ellipsis = max_len - 1;
     if (*len_str + len_ellipsis >= max_len)
@@ -1156,24 +1148,27 @@ INT WINAPI DrawTextExWorker( HDC hdc,
 
 	if (flags & DT_SINGLELINE)
 	{
-            if (flags & DT_VCENTER)
 #ifdef __REACTOS__
+        if (flags & DT_VCENTER)
+        {
+            if (flags & DT_CALCRECT)
             {
-                if (((rect->bottom - rect->top) < (invert_y ? -size.cy : size.cy)) && (flags & DT_CALCRECT))
-                {
-                    y = rect->top + (invert_y ? -size.cy : size.cy);
-                }
-                else
-                {
-#endif
-                    y = rect->top + (rect->bottom - rect->top) / 2 + (invert_y ? (size.cy / 2) : (-size.cy / 2));
-#ifdef __REACTOS__
-                }
+                if (rect->bottom - rect->top < size.cy / 2)
+                    y = rect->top + (invert_y ? size.cy : -size.cy) / 2;
             }
-#endif
-            else if (flags & DT_BOTTOM)
-                y = rect->bottom + (invert_y ? 0 : -size.cy);
+            else
+            {
+                y = rect->top + (rect->bottom - rect->top + (invert_y ? size.cy : -size.cy)) / 2;
+            }
         }
+        else if (flags & DT_BOTTOM)
+            y = rect->bottom + (invert_y ? 0 : -size.cy);
+#else
+	    if (flags & DT_VCENTER) y = rect->top +
+	    	(rect->bottom - rect->top) / 2 - size.cy / 2;
+	    else if (flags & DT_BOTTOM) y = rect->bottom - size.cy;
+#endif
+    }
 
 	if (!(flags & DT_CALCRECT))
 	{

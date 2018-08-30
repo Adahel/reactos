@@ -15,15 +15,12 @@
 #include "services.h"
 
 #include <userenv.h>
+#include <strsafe.h>
+
+#include <reactos/undocuser.h>
 
 #define NDEBUG
 #include <debug.h>
-
-/*
- * Uncomment the line below to use asynchronous IO operations
- * on the service control pipes.
- */
-#define USE_ASYNCHRONOUS_IO
 
 
 /* GLOBALS *******************************************************************/
@@ -33,6 +30,7 @@ LIST_ENTRY ServiceListHead;
 
 static RTL_RESOURCE DatabaseLock;
 static DWORD ResumeCount = 1;
+static DWORD NoInteractiveServices = 0;
 
 /* The critical section synchronizes service control requests */
 static CRITICAL_SECTION ControlServiceCriticalSection;
@@ -93,16 +91,13 @@ ScmCreateNewControlPipe(PSERVICE_IMAGE pServiceImage)
     }
 
     /* Create '\\.\pipe\net\NtControlPipeXXX' instance */
-    swprintf(szControlPipeName, L"\\\\.\\pipe\\net\\NtControlPipe%lu", ServiceCurrent);
+    StringCchPrintfW(szControlPipeName, ARRAYSIZE(szControlPipeName),
+                     L"\\\\.\\pipe\\net\\NtControlPipe%lu", ServiceCurrent);
 
     DPRINT("PipeName: %S\n", szControlPipeName);
 
     pServiceImage->hControlPipe = CreateNamedPipeW(szControlPipeName,
-#ifdef USE_ASYNCHRONOUS_IO
                                                    PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
-#else
-                                                   PIPE_ACCESS_DUPLEX,
-#endif
                                                    PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
                                                    100,
                                                    8000,
@@ -191,37 +186,30 @@ ScmLogonService(
     IN PSERVICE pService,
     IN PSERVICE_IMAGE pImage)
 {
-#if 0
+    DWORD dwError = ERROR_SUCCESS;
     PROFILEINFOW ProfileInfo;
     PWSTR pszUserName = NULL;
     PWSTR pszDomainName = NULL;
     PWSTR pszPassword = NULL;
     PWSTR ptr;
-    DWORD dwError = ERROR_SUCCESS;
-#endif
 
     DPRINT("ScmLogonService(%p %p)\n", pService, pImage);
-
     DPRINT("Service %S\n", pService->lpServiceName);
 
     if (ScmIsLocalSystemAccount(pImage->pszAccountName))
         return ERROR_SUCCESS;
 
-    // FIXME: Always assume LocalSystem
-    return ERROR_SUCCESS;
-
-#if 0
     /* Get the user and domain names */
     ptr = wcschr(pImage->pszAccountName, L'\\');
     if (ptr != NULL)
     {
         *ptr = L'\0';
-
         pszUserName = ptr + 1;
         pszDomainName = pImage->pszAccountName;
     }
     else
     {
+        // ERROR_INVALID_SERVICE_ACCOUNT
         pszUserName = pImage->pszAccountName;
         pszDomainName = NULL;
     }
@@ -241,7 +229,7 @@ ScmLogonService(
 
     DPRINT("Domain: %S  User: %S  Password: %S\n", pszDomainName, pszUserName, pszPassword);
 
-    /* Service logon */
+    /* Do the service logon */
     if (!LogonUserW(pszUserName,
                     pszDomainName,
                     pszPassword,
@@ -251,14 +239,13 @@ ScmLogonService(
     {
         dwError = GetLastError();
         DPRINT1("LogonUserW() failed (Error %lu)\n", dwError);
+
+        /* Normalize the returned error */
+        dwError = ERROR_SERVICE_LOGON_FAILED;
         goto done;
     }
 
-    // FIXME: Call LoadUserProfileW to be able to initialize a per-user
-    // environment block, with user-specific environment variables as
-    // %USERNAME%, %USERPROFILE%, and %ALLUSERSPROFILE% correctly initialized!!
-
-    /* Load the user profile, so that the per-user environment variables can be initialized */
+    /* Load the user profile; the per-user environment variables are thus correctly initialized */
     ZeroMemory(&ProfileInfo, sizeof(ProfileInfo));
     ProfileInfo.dwSize = sizeof(ProfileInfo);
     ProfileInfo.dwFlags = PI_NOUI;
@@ -286,7 +273,6 @@ done:
         *ptr = L'\\';
 
     return dwError;
-#endif
 }
 
 
@@ -441,41 +427,34 @@ done:
 }
 
 
-static VOID
-ScmDereferenceServiceImage(PSERVICE_IMAGE pServiceImage)
+VOID
+ScmRemoveServiceImage(PSERVICE_IMAGE pServiceImage)
 {
-    DPRINT1("ScmDereferenceServiceImage() called\n");
+    DPRINT1("ScmRemoveServiceImage() called\n");
 
-    pServiceImage->dwImageRunCount--;
+    /* FIXME: Terminate the process */
 
-    if (pServiceImage->dwImageRunCount == 0)
-    {
-        DPRINT1("dwImageRunCount == 0\n");
+    /* Remove the service image from the list */
+    RemoveEntryList(&pServiceImage->ImageListEntry);
 
-        /* FIXME: Terminate the process */
+    /* Close the process handle */
+    if (pServiceImage->hProcess != INVALID_HANDLE_VALUE)
+        CloseHandle(pServiceImage->hProcess);
 
-        /* Remove the service image from the list */
-        RemoveEntryList(&pServiceImage->ImageListEntry);
+    /* Close the control pipe */
+    if (pServiceImage->hControlPipe != INVALID_HANDLE_VALUE)
+        CloseHandle(pServiceImage->hControlPipe);
 
-        /* Close the process handle */
-        if (pServiceImage->hProcess != INVALID_HANDLE_VALUE)
-            CloseHandle(pServiceImage->hProcess);
+    /* Unload the user profile */
+    if (pServiceImage->hProfile != NULL)
+        UnloadUserProfile(pServiceImage->hToken, pServiceImage->hProfile);
 
-        /* Close the control pipe */
-        if (pServiceImage->hControlPipe != INVALID_HANDLE_VALUE)
-            CloseHandle(pServiceImage->hControlPipe);
+    /* Close the logon token */
+    if (pServiceImage->hToken != NULL)
+        CloseHandle(pServiceImage->hToken);
 
-        /* Unload the user profile */
-        if (pServiceImage->hProfile != NULL)
-            UnloadUserProfile(pServiceImage->hToken, pServiceImage->hProfile);
-
-        /* Close the logon token */
-        if (pServiceImage->hToken != NULL)
-            CloseHandle(pServiceImage->hToken);
-
-        /* Release the service image */
-        HeapFree(GetProcessHeap(), 0, pServiceImage);
-    }
+    /* Release the service image */
+    HeapFree(GetProcessHeap(), 0, pServiceImage);
 }
 
 
@@ -568,7 +547,9 @@ ScmGetServiceEntryByResumeCount(DWORD dwResumeCount)
 
 DWORD
 ScmCreateNewServiceRecord(LPCWSTR lpServiceName,
-                          PSERVICE* lpServiceRecord)
+                          PSERVICE *lpServiceRecord,
+                          DWORD dwServiceType,
+                          DWORD dwStartType)
 {
     PSERVICE lpService = NULL;
 
@@ -588,6 +569,9 @@ ScmCreateNewServiceRecord(LPCWSTR lpServiceName,
     lpService->lpServiceName = lpService->szServiceName;
     lpService->lpDisplayName = lpService->lpServiceName;
 
+    /* Set the start type */
+    lpService->dwStartType = dwStartType;
+
     /* Set the resume count */
     lpService->dwResumeCount = ResumeCount++;
 
@@ -596,12 +580,15 @@ ScmCreateNewServiceRecord(LPCWSTR lpServiceName,
                    &lpService->ServiceListEntry);
 
     /* Initialize the service status */
+    lpService->Status.dwServiceType = dwServiceType;
     lpService->Status.dwCurrentState = SERVICE_STOPPED;
     lpService->Status.dwControlsAccepted = 0;
-    lpService->Status.dwWin32ExitCode = ERROR_SERVICE_NEVER_STARTED;
+    lpService->Status.dwWin32ExitCode =
+        (dwStartType == SERVICE_DISABLED) ? ERROR_SERVICE_DISABLED : ERROR_SERVICE_NEVER_STARTED;
     lpService->Status.dwServiceSpecificExitCode = 0;
     lpService->Status.dwCheckPoint = 0;
-    lpService->Status.dwWaitHint = 2000; /* 2 seconds */
+    lpService->Status.dwWaitHint =
+        (dwServiceType & SERVICE_DRIVER) ? 0 : 2000; /* 2 seconds */
 
     return ERROR_SUCCESS;
 }
@@ -619,7 +606,15 @@ ScmDeleteServiceRecord(PSERVICE lpService)
 
     /* Dereference the service image */
     if (lpService->lpImage)
-        ScmDereferenceServiceImage(lpService->lpImage);
+    {
+        lpService->lpImage->dwImageRunCount--;
+
+        if (lpService->lpImage->dwImageRunCount == 0)
+        {
+            ScmRemoveServiceImage(lpService->lpImage);
+            lpService->lpImage = NULL;
+        }
+    }
 
     /* Decrement the group reference counter */
     ScmSetServiceGroup(lpService, NULL);
@@ -728,12 +723,12 @@ CreateServiceListEntry(LPCWSTR lpServiceName,
     DPRINT("Display name: %S\n", lpDisplayName);
 
     dwError = ScmCreateNewServiceRecord(lpServiceName,
-                                        &lpService);
+                                        &lpService,
+                                        dwServiceType,
+                                        dwStartType);
     if (dwError != ERROR_SUCCESS)
         goto done;
 
-    lpService->Status.dwServiceType = dwServiceType;
-    lpService->dwStartType = dwStartType;
     lpService->dwErrorControl = dwErrorControl;
     lpService->dwTag = dwTagId;
 
@@ -817,7 +812,7 @@ ScmDeleteMarkedServices(VOID)
 
         ServiceEntry = ServiceEntry->Flink;
 
-        if (CurrentService->bDeleted == TRUE)
+        if (CurrentService->bDeleted != FALSE)
         {
             dwError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
                                     L"System\\CurrentControlSet\\Services",
@@ -842,6 +837,33 @@ ScmDeleteMarkedServices(VOID)
 }
 
 
+static
+VOID
+ScmGetNoInteractiveServicesValue(VOID)
+{
+    HKEY hKey;
+    DWORD dwKeySize;
+    LONG lError;
+
+    lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                           L"SYSTEM\\CurrentControlSet\\Control\\Windows",
+                           0,
+                           KEY_READ,
+                           &hKey);
+    if (lError == ERROR_SUCCESS)
+    {
+        dwKeySize = sizeof(NoInteractiveServices);
+        lError = RegQueryValueExW(hKey,
+                                  L"NoInteractiveServices",
+                                  0,
+                                  NULL,
+                                  (LPBYTE)&NoInteractiveServices,
+                                  &dwKeySize);
+        RegCloseKey(hKey);
+    }
+}
+
+
 DWORD
 ScmCreateServiceDatabase(VOID)
 {
@@ -855,11 +877,15 @@ ScmCreateServiceDatabase(VOID)
 
     DPRINT("ScmCreateServiceDatabase() called\n");
 
+    /* Retrieve the NoInteractiveServies value */
+    ScmGetNoInteractiveServicesValue();
+
+    /* Create the service group list */
     dwError = ScmCreateGroupList();
     if (dwError != ERROR_SUCCESS)
         return dwError;
 
-    /* Initialize basic variables */
+    /* Initialize image and service lists */
     InitializeListHead(&ImageListHead);
     InitializeListHead(&ServiceListHead);
 
@@ -1010,6 +1036,11 @@ ScmCheckDriver(PSERVICE Service)
 
             /* Mark service as 'running' */
             Service->Status.dwCurrentState = SERVICE_RUNNING;
+            Service->Status.dwControlsAccepted = SERVICE_ACCEPT_STOP;
+            Service->Status.dwWin32ExitCode = ERROR_SUCCESS;
+            Service->Status.dwServiceSpecificExitCode = 0;
+            Service->Status.dwCheckPoint = 0;
+            Service->Status.dwWaitHint = 0;
 
             /* Mark the service group as 'running' */
             if (Service->lpGroup != NULL)
@@ -1060,7 +1091,9 @@ ScmGetBootAndSystemDriverState(VOID)
 
 
 DWORD
-ScmControlService(PSERVICE Service,
+ScmControlService(HANDLE hControlPipe,
+                  PWSTR pServiceName,
+                  SERVICE_STATUS_HANDLE hServiceStatus,
                   DWORD dwControl)
 {
     PSCM_CONTROL_PACKET ControlPacket;
@@ -1072,9 +1105,7 @@ ScmControlService(PSERVICE Service,
     PWSTR Ptr;
     DWORD dwError = ERROR_SUCCESS;
     BOOL bResult;
-#ifdef USE_ASYNCHRONOUS_IO
     OVERLAPPED Overlapped = {0};
-#endif
 
     DPRINT("ScmControlService() called\n");
 
@@ -1083,7 +1114,7 @@ ScmControlService(PSERVICE Service,
 
     /* Calculate the total length of the start command line */
     PacketSize = sizeof(SCM_CONTROL_PACKET);
-    PacketSize += (DWORD)((wcslen(Service->lpServiceName) + 1) * sizeof(WCHAR));
+    PacketSize += (DWORD)((wcslen(pServiceName) + 1) * sizeof(WCHAR));
 
     ControlPacket = HeapAlloc(GetProcessHeap(),
                               HEAP_ZERO_MEMORY,
@@ -1096,18 +1127,17 @@ ScmControlService(PSERVICE Service,
 
     ControlPacket->dwSize = PacketSize;
     ControlPacket->dwControl = dwControl;
-    ControlPacket->hServiceStatus = (SERVICE_STATUS_HANDLE)Service;
+    ControlPacket->hServiceStatus = hServiceStatus;
 
     ControlPacket->dwServiceNameOffset = sizeof(SCM_CONTROL_PACKET);
 
     Ptr = (PWSTR)((PBYTE)ControlPacket + ControlPacket->dwServiceNameOffset);
-    wcscpy(Ptr, Service->lpServiceName);
+    wcscpy(Ptr, pServiceName);
 
     ControlPacket->dwArgumentsCount = 0;
     ControlPacket->dwArgumentsOffset = 0;
 
-#ifdef USE_ASYNCHRONOUS_IO
-    bResult = WriteFile(Service->lpImage->hControlPipe,
+    bResult = WriteFile(hControlPipe,
                         ControlPacket,
                         PacketSize,
                         &dwWriteCount,
@@ -1121,13 +1151,13 @@ ScmControlService(PSERVICE Service,
         {
             DPRINT("dwError: ERROR_IO_PENDING\n");
 
-            dwError = WaitForSingleObject(Service->lpImage->hControlPipe,
+            dwError = WaitForSingleObject(hControlPipe,
                                           PipeTimeout);
             DPRINT("WaitForSingleObject() returned %lu\n", dwError);
 
             if (dwError == WAIT_TIMEOUT)
             {
-                bResult = CancelIo(Service->lpImage->hControlPipe);
+                bResult = CancelIo(hControlPipe);
                 if (bResult == FALSE)
                 {
                     DPRINT1("CancelIo() failed (Error: %lu)\n", GetLastError());
@@ -1138,7 +1168,7 @@ ScmControlService(PSERVICE Service,
             }
             else if (dwError == WAIT_OBJECT_0)
             {
-                bResult = GetOverlappedResult(Service->lpImage->hControlPipe,
+                bResult = GetOverlappedResult(hControlPipe,
                                               &Overlapped,
                                               &dwWriteCount,
                                               TRUE);
@@ -1161,7 +1191,7 @@ ScmControlService(PSERVICE Service,
     /* Read the reply */
     Overlapped.hEvent = (HANDLE) NULL;
 
-    bResult = ReadFile(Service->lpImage->hControlPipe,
+    bResult = ReadFile(hControlPipe,
                        &ReplyPacket,
                        sizeof(SCM_REPLY_PACKET),
                        &dwReadCount,
@@ -1175,13 +1205,13 @@ ScmControlService(PSERVICE Service,
         {
             DPRINT("dwError: ERROR_IO_PENDING\n");
 
-            dwError = WaitForSingleObject(Service->lpImage->hControlPipe,
+            dwError = WaitForSingleObject(hControlPipe,
                                           PipeTimeout);
             DPRINT("WaitForSingleObject() returned %lu\n", dwError);
 
             if (dwError == WAIT_TIMEOUT)
             {
-                bResult = CancelIo(Service->lpImage->hControlPipe);
+                bResult = CancelIo(hControlPipe);
                 if (bResult == FALSE)
                 {
                     DPRINT1("CancelIo() failed (Error: %lu)\n", GetLastError());
@@ -1192,7 +1222,7 @@ ScmControlService(PSERVICE Service,
             }
             else if (dwError == WAIT_OBJECT_0)
             {
-                bResult = GetOverlappedResult(Service->lpImage->hControlPipe,
+                bResult = GetOverlappedResult(hControlPipe,
                                               &Overlapped,
                                               &dwReadCount,
                                               TRUE);
@@ -1212,43 +1242,6 @@ ScmControlService(PSERVICE Service,
         }
     }
 
-#else
-    /* Send the control packet */
-    bResult = WriteFile(Service->lpImage->hControlPipe,
-                        ControlPacket,
-                        PacketSize,
-                        &dwWriteCount,
-                        NULL);
-    if (bResult == FALSE)
-    {
-        dwError = GetLastError();
-        DPRINT("WriteFile() failed (Error %lu)\n", dwError);
-
-        if ((dwError == ERROR_GEN_FAILURE) &&
-            (dwControl == SERVICE_CONTROL_STOP))
-        {
-            /* Service is already terminated */
-            Service->Status.dwCurrentState = SERVICE_STOPPED;
-            Service->Status.dwControlsAccepted = 0;
-            Service->Status.dwWin32ExitCode = ERROR_SERVICE_NOT_ACTIVE;
-            dwError = ERROR_SUCCESS;
-        }
-        goto Done;
-    }
-
-    /* Read the reply */
-    bResult = ReadFile(Service->lpImage->hControlPipe,
-                       &ReplyPacket,
-                       sizeof(SCM_REPLY_PACKET),
-                       &dwReadCount,
-                       NULL);
-    if (bResult == FALSE)
-    {
-        dwError = GetLastError();
-        DPRINT("ReadFile() failed (Error %lu)\n", dwError);
-    }
-#endif
-
 Done:
     /* Release the control packet */
     HeapFree(GetProcessHeap(),
@@ -1258,13 +1251,6 @@ Done:
     if (dwReadCount == sizeof(SCM_REPLY_PACKET))
     {
         dwError = ReplyPacket.dwError;
-    }
-
-    if (dwError == ERROR_SUCCESS &&
-        dwControl == SERVICE_CONTROL_STOP)
-    {
-        ScmDereferenceServiceImage(Service->lpImage);
-        Service->lpImage = NULL;
     }
 
     LeaveCriticalSection(&ControlServiceCriticalSection);
@@ -1291,9 +1277,7 @@ ScmSendStartCommand(PSERVICE Service,
     BOOL bResult;
     DWORD dwWriteCount = 0;
     DWORD dwReadCount = 0;
-#ifdef USE_ASYNCHRONOUS_IO
     OVERLAPPED Overlapped = {0};
-#endif
 
     DPRINT("ScmSendStartCommand() called\n");
 
@@ -1363,7 +1347,6 @@ ScmSendStartCommand(PSERVICE Service,
         }
     }
 
-#ifdef USE_ASYNCHRONOUS_IO
     bResult = WriteFile(Service->lpImage->hControlPipe,
                         ControlPacket,
                         PacketSize,
@@ -1469,33 +1452,6 @@ ScmSendStartCommand(PSERVICE Service,
         }
     }
 
-#else
-    /* Send the start command */
-    bResult = WriteFile(Service->lpImage->hControlPipe,
-                        ControlPacket,
-                        PacketSize,
-                        &dwWriteCount,
-                        NULL);
-    if (bResult == FALSE)
-    {
-        dwError = GetLastError();
-        DPRINT("WriteFile() failed (Error %lu)\n", dwError);
-        goto Done;
-    }
-
-    /* Read the reply */
-    bResult = ReadFile(Service->lpImage->hControlPipe,
-                       &ReplyPacket,
-                       sizeof(SCM_REPLY_PACKET),
-                       &dwReadCount,
-                       NULL);
-    if (bResult == FALSE)
-    {
-        dwError = GetLastError();
-        DPRINT("ReadFile() failed (Error %lu)\n", dwError);
-    }
-#endif
-
 Done:
     /* Release the control packet */
     HeapFree(GetProcessHeap(),
@@ -1520,9 +1476,7 @@ ScmWaitForServiceConnect(PSERVICE Service)
     DWORD dwProcessId = 0;
     DWORD dwError = ERROR_SUCCESS;
     BOOL bResult;
-#ifdef USE_ASYNCHRONOUS_IO
     OVERLAPPED Overlapped = {0};
-#endif
 #if 0
     LPCWSTR lpLogStrings[3];
     WCHAR szBuffer1[20];
@@ -1531,7 +1485,6 @@ ScmWaitForServiceConnect(PSERVICE Service)
 
     DPRINT("ScmWaitForServiceConnect()\n");
 
-#ifdef USE_ASYNCHRONOUS_IO
     Overlapped.hEvent = (HANDLE)NULL;
 
     bResult = ConnectNamedPipe(Service->lpImage->hControlPipe,
@@ -1691,39 +1644,6 @@ ScmWaitForServiceConnect(PSERVICE Service)
     DPRINT("ScmWaitForServiceConnect() done\n");
 
     return ERROR_SUCCESS;
-#else
-
-    /* Connect control pipe */
-    if (ConnectNamedPipe(Service->lpImage->hControlPipe, NULL) ?
-        TRUE : (dwError = GetLastError()) == ERROR_PIPE_CONNECTED)
-    {
-        DPRINT("Control pipe connected!\n");
-
-        /* Read SERVICE_STATUS_HANDLE from pipe */
-        bResult = ReadFile(Service->lpImage->hControlPipe,
-                           (LPVOID)&dwProcessId,
-                           sizeof(DWORD),
-                           &dwRead,
-                           NULL);
-        if (bResult == FALSE)
-        {
-            dwError = GetLastError();
-            DPRINT1("Reading the service control pipe failed (Error %lu)\n",
-                    dwError);
-        }
-        else
-        {
-            dwError = ERROR_SUCCESS;
-            DPRINT("Read control pipe successfully\n");
-        }
-    }
-    else
-    {
-        DPRINT1("Connecting control pipe failed! (Error %lu)\n", dwError);
-    }
-
-    return dwError;
-#endif
 }
 
 
@@ -1753,11 +1673,12 @@ ScmStartUserModeService(PSERVICE Service,
     ZeroMemory(&ProcessInformation, sizeof(ProcessInformation));
 
     /* Use the interactive desktop if the service is interactive */
-    // TODO: We should also check the value "NoInteractiveServices ":
-    // See https://msdn.microsoft.com/en-us/library/windows/desktop/ms683502(v=vs.85).aspx
-    // for more details.
-    if (Service->Status.dwServiceType & SERVICE_INTERACTIVE_PROCESS)
+    if ((NoInteractiveServices == 0) &&
+        (Service->Status.dwServiceType & SERVICE_INTERACTIVE_PROCESS))
+    {
+        StartupInfo.dwFlags |= STARTF_INHERITDESKTOP;
         StartupInfo.lpDesktop = L"WinSta0\\Default";
+    }
 
     if (Service->lpImage->hToken)
     {
@@ -1887,13 +1808,8 @@ ScmLoadService(PSERVICE Service,
 
     if (Service->Status.dwServiceType & SERVICE_DRIVER)
     {
-        /* Load driver */
-        dwError = ScmLoadDriver(Service);
-        if (dwError == ERROR_SUCCESS)
-        {
-            Service->Status.dwCurrentState = SERVICE_RUNNING;
-            Service->Status.dwControlsAccepted = SERVICE_ACCEPT_STOP;
-        }
+        /* Start the driver */
+        dwError = ScmStartDriver(Service);
     }
     else // if (Service->Status.dwServiceType & (SERVICE_WIN32 | SERVICE_INTERACTIVE_PROCESS))
     {
@@ -1909,8 +1825,12 @@ ScmLoadService(PSERVICE Service,
             }
             else
             {
-                ScmDereferenceServiceImage(Service->lpImage);
-                Service->lpImage = NULL;
+                Service->lpImage->dwImageRunCount--;
+                if (Service->lpImage->dwImageRunCount == 0)
+                {
+                    ScmRemoveServiceImage(Service->lpImage);
+                    Service->lpImage = NULL;
+                }
             }
         }
     }
@@ -1939,7 +1859,8 @@ ScmLoadService(PSERVICE Service,
         if (Service->dwErrorControl != SERVICE_ERROR_IGNORE)
         {
             /* Log a failed service start */
-            swprintf(szLogBuffer, L"%lu", dwError);
+            StringCchPrintfW(szLogBuffer, ARRAYSIZE(szLogBuffer),
+                             L"%lu", dwError);
             lpLogStrings[0] = Service->lpServiceName;
             lpLogStrings[1] = szLogBuffer;
             ScmLogEvent(EVENT_SERVICE_START_FAILED,
@@ -2036,9 +1957,7 @@ ScmAutoStartServices(VOID)
      */
     ASSERT(ScmInitialize);
 
-    /*
-     * Retrieve the SafeBoot parameter.
-     */
+    /* Retrieve the SafeBoot parameter */
     dwError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
                             L"SYSTEM\\CurrentControlSet\\Control\\SafeBoot\\Option",
                             0,
@@ -2070,19 +1989,21 @@ ScmAutoStartServices(VOID)
         CurrentService = CONTAINING_RECORD(ServiceEntry, SERVICE, ServiceListEntry);
 
         /* Build the safe boot path */
-        wcscpy(szSafeBootServicePath,
-               L"SYSTEM\\CurrentControlSet\\Control\\SafeBoot");
+        StringCchCopyW(szSafeBootServicePath, ARRAYSIZE(szSafeBootServicePath),
+                       L"SYSTEM\\CurrentControlSet\\Control\\SafeBoot");
 
         switch (SafeBootEnabled)
         {
             /* NOTE: Assumes MINIMAL (1) and DSREPAIR (3) load same items */
             case 1:
             case 3:
-                wcscat(szSafeBootServicePath, L"\\Minimal\\");
+                StringCchCatW(szSafeBootServicePath, ARRAYSIZE(szSafeBootServicePath),
+                              L"\\Minimal\\");
                 break;
 
             case 2:
-                wcscat(szSafeBootServicePath, L"\\Network\\");
+                StringCchCatW(szSafeBootServicePath, ARRAYSIZE(szSafeBootServicePath),
+                              L"\\Network\\");
                 break;
         }
 
@@ -2099,9 +2020,8 @@ ScmAutoStartServices(VOID)
                 RegCloseKey(hKey);
 
                 /* Finish Safe Boot path off */
-                wcsncat(szSafeBootServicePath,
-                        CurrentService->lpServiceName,
-                        MAX_PATH - wcslen(szSafeBootServicePath));
+                StringCchCatW(szSafeBootServicePath, ARRAYSIZE(szSafeBootServicePath),
+                              CurrentService->lpServiceName);
 
                 /* Check that the key is in the Safe Boot path */
                 dwError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
@@ -2244,12 +2164,16 @@ ScmAutoShutdownServices(VOID)
     {
         CurrentService = CONTAINING_RECORD(ServiceEntry, SERVICE, ServiceListEntry);
 
-        if (CurrentService->Status.dwCurrentState == SERVICE_RUNNING ||
-            CurrentService->Status.dwCurrentState == SERVICE_START_PENDING)
+        if ((CurrentService->Status.dwControlsAccepted & SERVICE_ACCEPT_SHUTDOWN) &&
+            (CurrentService->Status.dwCurrentState == SERVICE_RUNNING ||
+             CurrentService->Status.dwCurrentState == SERVICE_START_PENDING))
         {
-            /* shutdown service */
-            DPRINT("Shutdown service: %S\n", CurrentService->szServiceName);
-            ScmControlService(CurrentService, SERVICE_CONTROL_SHUTDOWN);
+            /* Send the shutdown notification */
+            DPRINT("Shutdown service: %S\n", CurrentService->lpServiceName);
+            ScmControlService(CurrentService->lpImage->hControlPipe,
+                              CurrentService->lpServiceName,
+                              (SERVICE_STATUS_HANDLE)CurrentService,
+                              SERVICE_CONTROL_SHUTDOWN);
         }
 
         ServiceEntry = ServiceEntry->Flink;

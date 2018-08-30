@@ -15,22 +15,23 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <config.h>
+#include "config.h"
 #include <stdarg.h>
-//#include <stdlib.h>
-#include <ntstatus.h>
+#include <stdlib.h>
+#include "ntstatus.h"
 #define WIN32_NO_STATUS
-#include <windef.h>
-#include <winbase.h>
-#include <wine/winternl.h>
-#include <wtsapi32.h>
-#include <wine/debug.h>
+#include "windef.h"
+#include "winbase.h"
+#include "wine/winternl.h"
+#include "wtsapi32.h"
+#include "wine/debug.h"
+#include "wine/heap.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(wtsapi);
 
-/* FIXME: Inspect */
+#ifdef __REACTOS__ /* FIXME: Inspect */
 #define GetCurrentProcessToken() ((HANDLE)~(ULONG_PTR)3)
-
+#endif
 
 /************************************************************
  *                WTSCloseServer  (WTSAPI32.@)
@@ -241,7 +242,7 @@ BOOL WINAPI WTSEnumerateSessionsW(HANDLE hServer, DWORD Reserved, DWORD Version,
  */
 void WINAPI WTSFreeMemory(PVOID pMemory)
 {
-    HeapFree(GetProcessHeap(), 0, pMemory);
+    heap_free(pMemory);
 }
 
 /************************************************************
@@ -305,6 +306,19 @@ BOOL WINAPI WTSQuerySessionInformationW(
     FIXME("Stub %p 0x%08x %d %p %p\n", hServer, SessionId, WTSInfoClass,
         Buffer, BytesReturned);
 
+    if (WTSInfoClass == WTSUserName)
+    {
+        WCHAR *username;
+        DWORD count = 0;
+
+        GetUserNameW(NULL, &count);
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) return FALSE;
+        if (!(username = heap_alloc(count * sizeof(WCHAR)))) return FALSE;
+        GetUserNameW(username, &count);
+        *Buffer = username;
+        *BytesReturned = count * sizeof(WCHAR);
+        return TRUE;
+    }
     return FALSE;
 }
 
@@ -357,7 +371,7 @@ BOOL WINAPI WTSRegisterSessionNotification(HWND hWnd, DWORD dwFlags)
 }
 
 /************************************************************
- *                WTSRegisterSessionNotification (WTSAPI32.@)
+ *                WTSRegisterSessionNotificationEx (WTSAPI32.@)
  */
 BOOL WINAPI WTSRegisterSessionNotificationEx(HANDLE hServer, HWND hWnd, DWORD dwFlags)
 {

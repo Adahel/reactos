@@ -1,5 +1,5 @@
 
-spec2def(cfgmgr32.dll cfgmgr32.spec ADD_IMPORTLIB)
+spec2def(cfgmgr32.dll cfgmgr32.spec)
 
 list(APPEND SOURCE
     cfgmgr32.rc

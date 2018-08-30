@@ -18,6 +18,17 @@
 
 extern NPAGED_LOOKASIDE_LIST iBcbLookasideList;
 
+/* Counters:
+ * - Number of calls to CcMapData that could wait
+ * - Number of calls to CcMapData that couldn't wait
+ * - Number of calls to CcPinRead that could wait
+ * - Number of calls to CcPinRead that couldn't wait
+ */
+ULONG CcMapDataWait = 0;
+ULONG CcMapDataNoWait = 0;
+ULONG CcPinReadWait = 0;
+ULONG CcPinReadNoWait = 0;
+
 /* FUNCTIONS *****************************************************************/
 
 /*
@@ -33,19 +44,28 @@ CcMapData (
     OUT PVOID *pBcb,
     OUT PVOID *pBuffer)
 {
-    ULONG ReadOffset;
+    LONGLONG ReadOffset;
     BOOLEAN Valid;
     PROS_SHARED_CACHE_MAP SharedCacheMap;
     PROS_VACB Vacb;
     NTSTATUS Status;
     PINTERNAL_BCB iBcb;
-    ULONG ROffset;
+    LONGLONG ROffset;
 
     DPRINT("CcMapData(FileObject 0x%p, FileOffset %I64x, Length %lu, Flags 0x%lx,"
            " pBcb 0x%p, pBuffer 0x%p)\n", FileObject, FileOffset->QuadPart,
            Length, Flags, pBcb, pBuffer);
 
-    ReadOffset = (ULONG)FileOffset->QuadPart;
+    if (Flags & MAP_WAIT)
+    {
+        ++CcMapDataWait;
+    }
+    else
+    {
+        ++CcMapDataNoWait;
+    }
+
+    ReadOffset = FileOffset->QuadPart;
 
     ASSERT(FileObject);
     ASSERT(FileObject->SectionObjectPointer);
@@ -101,7 +121,7 @@ CcMapData (
         }
     }
 
-    *pBuffer = (PVOID)((ULONG_PTR)(*pBuffer) + ReadOffset % VACB_MAPPING_GRANULARITY);
+    *pBuffer = (PUCHAR)*pBuffer + ReadOffset % VACB_MAPPING_GRANULARITY;
     iBcb = ExAllocateFromNPagedLookasideList(&iBcbLookasideList);
     if (iBcb == NULL)
     {
@@ -176,6 +196,15 @@ CcPinRead (
     CCTRACE(CC_API_DEBUG, "FileOffset=%p FileOffset=%p Length=%lu Flags=0x%lx\n",
         FileObject, FileOffset, Length, Flags);
 
+    if (Flags & PIN_WAIT)
+    {
+        ++CcPinReadWait;
+    }
+    else
+    {
+        ++CcPinReadNoWait;
+    }
+
     if (CcMapData(FileObject, FileOffset, Length, Flags, Bcb, Buffer))
     {
         if (CcPinMappedData(FileObject, FileOffset, Length, Flags, Bcb))
@@ -186,7 +215,6 @@ CcPinRead (
 
             iBcb->Pinned = TRUE;
             iBcb->Vacb->PinCount++;
-            CcRosReleaseVacbLock(iBcb->Vacb);
 
             if (Flags & PIN_EXCLUSIVE)
             {
@@ -247,6 +275,10 @@ CcSetDirtyPinnedData (
         Bcb, Lsn);
 
     iBcb->Dirty = TRUE;
+    if (!iBcb->Vacb->Dirty)
+    {
+        CcRosMarkDirtyVacb(iBcb->Vacb);
+    }
 }
 
 
@@ -279,18 +311,17 @@ CcUnpinDataForThread (
     {
         ExReleaseResourceForThreadLite(&iBcb->Lock, ResourceThreadId);
         iBcb->Pinned = FALSE;
-        CcRosAcquireVacbLock(iBcb->Vacb, NULL);
         iBcb->Vacb->PinCount--;
     }
 
-    CcRosReleaseVacb(iBcb->Vacb->SharedCacheMap,
-                     iBcb->Vacb,
-                     TRUE,
-                     iBcb->Dirty,
-                     FALSE);
-
     if (--iBcb->RefCount == 0)
     {
+        CcRosReleaseVacb(iBcb->Vacb->SharedCacheMap,
+                         iBcb->Vacb,
+                         TRUE,
+                         iBcb->Dirty,
+                         FALSE);
+
         ExDeleteResourceLite(&iBcb->Lock);
         ExFreeToNPagedLookasideList(&iBcbLookasideList, iBcb);
     }
@@ -331,7 +362,6 @@ CcUnpinRepinnedBcb (
         IoStatus->Information = 0;
         if (WriteThrough)
         {
-            CcRosAcquireVacbLock(iBcb->Vacb, NULL);
             if (iBcb->Vacb->Dirty)
             {
                 IoStatus->Status = CcRosFlushVacb(iBcb->Vacb);
@@ -340,7 +370,6 @@ CcUnpinRepinnedBcb (
             {
                 IoStatus->Status = STATUS_SUCCESS;
             }
-            CcRosReleaseVacbLock(iBcb->Vacb);
         }
         else
         {
@@ -351,9 +380,16 @@ CcUnpinRepinnedBcb (
         {
             ExReleaseResourceLite(&iBcb->Lock);
             iBcb->Pinned = FALSE;
-            CcRosAcquireVacbLock(iBcb->Vacb, NULL);
             iBcb->Vacb->PinCount--;
+            ASSERT(iBcb->Vacb->PinCount == 0);
         }
+
+        CcRosReleaseVacb(iBcb->Vacb->SharedCacheMap,
+                         iBcb->Vacb,
+                         TRUE,
+                         iBcb->Dirty,
+                         FALSE);
+
         ExDeleteResourceLite(&iBcb->Lock);
         ExFreeToNPagedLookasideList(&iBcbLookasideList, iBcb);
     }

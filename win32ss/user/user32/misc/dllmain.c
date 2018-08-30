@@ -2,7 +2,6 @@
 
 #include <ndk/cmfuncs.h>
 
-#include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(user32);
 
 #define KEY_LENGTH 1024
@@ -359,7 +358,7 @@ ClientThreadSetup(VOID)
 
     // FIXME: Disabling this call is a HACK!! See also User32CallClientThreadSetupFromKernel...
     // return ClientThreadSetupHelper(FALSE);
-    UNIMPLEMENTED;
+    TRACE("ClientThreadSetup is not implemented\n");
     return TRUE;
 }
 
@@ -575,7 +574,7 @@ User32CallGetCharsetInfo(PVOID Arguments, ULONG ArgumentLength)
 
   TRACE("GetCharsetInfo\n");
 
-  Ret = TranslateCharsetInfo((DWORD *)pgci->Locale, &pgci->Cs, TCI_SRCLOCALE);
+  Ret = TranslateCharsetInfo((DWORD *)(ULONG_PTR)pgci->Locale, &pgci->Cs, TCI_SRCLOCALE);
 
   return ZwCallbackReturn(Arguments, ArgumentLength, Ret ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL);
 }

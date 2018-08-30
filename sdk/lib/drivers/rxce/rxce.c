@@ -174,13 +174,15 @@ BOOLEAN DumpDispatchRoutine = FALSE;
 
 /* FUNCTIONS ****************************************************************/
 
+/*
+ * @implemented
+ */
 NTSTATUS
 NTAPI
 RxAcquireExclusiveFcbResourceInMRx(
     _Inout_ PMRX_FCB Fcb)
 {
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    return RxAcquireExclusiveFcb(NULL, (PFCB)Fcb);
 }
 
 /*
@@ -2310,7 +2312,7 @@ RxDereferenceAndDeleteRxContext_Real(
         /* Is ShadowCrit still owned? Shouldn't happen! */
         if (RxContext->ShadowCritOwner != 0)
         {
-            DPRINT1("ShadowCritOwner not null! %p\n", (PVOID)RxContext->ShadowCritOwner);
+            DPRINT1("ShadowCritOwner not null! %lx\n", RxContext->ShadowCritOwner);
             ASSERT(FALSE);
         }
 #endif
@@ -4610,6 +4612,17 @@ RxInitializeContext(
 /*
  * @implemented
  */
+VOID
+NTAPI
+RxInitializeDebugSupport(
+    VOID)
+{
+    /* Nothing to do */
+}
+
+/*
+ * @implemented
+ */
 NTSTATUS
 NTAPI
 RxInitializeDispatcher(
@@ -6834,6 +6847,9 @@ RxpUndoScavengerFinalizationMarking(
             --Scavenger->SrvOpensToBeFinalized;
             ListEntry = &((PSRV_OPEN)Instance)->ScavengerFinalizationList;
             break;
+
+        default:
+            return;
     }
 
     /* Also, remove the extra ref from the scavenger */
@@ -7533,10 +7549,17 @@ RxRemoveNameNetFcb(
     ASSERT(RxIsFcbTableLockExclusive(&NetRoot->FcbTable));
     ASSERT(RxIsFcbAcquiredExclusive(ThisFcb));
 
-    RxFcbTableRemoveFcb(&NetRoot->FcbTable, ThisFcb);
-    DPRINT("FCB (%p) %wZ removed\n", ThisFcb, &ThisFcb->FcbTableEntry.Path);
-    /* Mark, so that we don't try to do it twice */
-    SetFlag(ThisFcb->FcbState, FCB_STATE_NAME_ALREADY_REMOVED);
+#ifdef __REACTOS__
+    if (!BooleanFlagOn(ThisFcb->FcbState, FCB_STATE_NAME_ALREADY_REMOVED))
+    {
+#endif
+        RxFcbTableRemoveFcb(&NetRoot->FcbTable, ThisFcb);
+        DPRINT("FCB (%p) %wZ removed\n", ThisFcb, &ThisFcb->FcbTableEntry.Path);
+        /* Mark, so that we don't try to do it twice */
+        SetFlag(ThisFcb->FcbState, FCB_STATE_NAME_ALREADY_REMOVED);
+#ifdef __REACTOS__
+    }
+#endif
 }
 
 /*
@@ -7871,7 +7894,7 @@ RxScavengerTimerRoutine(
     {
         /* Done */
         Scavenger->State = RDBSS_SCAVENGER_ACTIVE;
-        KeResetEvent(&Scavenger->ScavengeEvent);
+        KeClearEvent(&Scavenger->ScavengeEvent);
 
         /* Scavenger the entries */
         RxReleaseScavengerMutex();
@@ -7959,7 +7982,7 @@ RxSpinUpRequestsDispatcher(
         {
             ListEntry = &RxDispatcher->SpinUpRequests;
         }
-        KeResetEvent(&RxDispatcher->SpinUpRequestsEvent);
+        KeClearEvent(&RxDispatcher->SpinUpRequestsEvent);
         KeReleaseSpinLock(&RxDispatcher->SpinUpRequestsLock, OldIrql);
 
         while (ListEntry != &RxDispatcher->SpinUpRequests)

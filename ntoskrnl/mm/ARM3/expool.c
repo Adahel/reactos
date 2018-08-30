@@ -460,6 +460,172 @@ ExpComputePartialHashForAddress(IN PVOID BaseAddress)
     return (Result >> 24) ^ (Result >> 16) ^ (Result >> 8) ^ Result;
 }
 
+#if DBG
+FORCEINLINE
+BOOLEAN
+ExpTagAllowPrint(CHAR Tag)
+{
+    if ((Tag >= 'a' && Tag <= 'z') ||
+        (Tag >= 'A' && Tag <= 'Z') ||
+        (Tag >= '0' && Tag <= '9') ||
+        Tag == ' ' || Tag == '=' ||
+        Tag == '?' || Tag == '@')
+    {
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+#ifdef KDBG
+#define MiDumperPrint(dbg, fmt, ...)        \
+    if (dbg) KdbpPrint(fmt, ##__VA_ARGS__); \
+    else DPRINT1(fmt, ##__VA_ARGS__)
+#else
+#define MiDumperPrint(dbg, fmt, ...)        \
+    DPRINT1(fmt, ##__VA_ARGS__)
+#endif
+
+VOID
+MiDumpPoolConsumers(BOOLEAN CalledFromDbg, ULONG Tag, ULONG Mask, ULONG Flags)
+{
+    SIZE_T i;
+    BOOLEAN Verbose;
+
+    //
+    // Only print header if called from OOM situation
+    //
+    if (!CalledFromDbg)
+    {
+        DPRINT1("---------------------\n");
+        DPRINT1("Out of memory dumper!\n");
+    }
+#ifdef KDBG
+    else
+    {
+        KdbpPrint("Pool Used:\n");
+    }
+#endif
+
+    //
+    // Remember whether we'll have to be verbose
+    // This is the only supported flag!
+    //
+    Verbose = BooleanFlagOn(Flags, 1);
+
+    //
+    // Print table header
+    //
+    if (Verbose)
+    {
+        MiDumperPrint(CalledFromDbg, "\t\t\t\tNonPaged\t\t\t\t\t\t\tPaged\n");
+        MiDumperPrint(CalledFromDbg, "Tag\t\tAllocs\t\tFrees\t\tDiff\t\tUsed\t\tAllocs\t\tFrees\t\tDiff\t\tUsed\n");
+    }
+    else
+    {
+        MiDumperPrint(CalledFromDbg, "\t\tNonPaged\t\t\tPaged\n");
+        MiDumperPrint(CalledFromDbg, "Tag\t\tAllocs\t\tUsed\t\tAllocs\t\tUsed\n");
+    }
+
+    //
+    // We'll extract allocations for all the tracked pools
+    //
+    for (i = 0; i < PoolTrackTableSize; ++i)
+    {
+        PPOOL_TRACKER_TABLE TableEntry;
+
+        TableEntry = &PoolTrackTable[i];
+
+        //
+        // We only care about tags which have allocated memory
+        //
+        if (TableEntry->NonPagedBytes != 0 || TableEntry->PagedBytes != 0)
+        {
+            //
+            // If there's a tag, attempt to do a pretty print
+            // only if it matches the caller's tag, or if
+            // any tag is allowed
+            // For checking whether it matches caller's tag,
+            // use the mask to make sure not to mess with the wildcards
+            //
+            if (TableEntry->Key != 0 && TableEntry->Key != TAG_NONE &&
+                (Tag == 0 || (TableEntry->Key & Mask) == (Tag & Mask)))
+            {
+                CHAR Tag[4];
+
+                //
+                // Extract each 'component' and check whether they are printable
+                //
+                Tag[0] = TableEntry->Key & 0xFF;
+                Tag[1] = TableEntry->Key >> 8 & 0xFF;
+                Tag[2] = TableEntry->Key >> 16 & 0xFF;
+                Tag[3] = TableEntry->Key >> 24 & 0xFF;
+
+                if (ExpTagAllowPrint(Tag[0]) && ExpTagAllowPrint(Tag[1]) && ExpTagAllowPrint(Tag[2]) && ExpTagAllowPrint(Tag[3]))
+                {
+                    //
+                    // Print in direct order to make !poolused TAG usage easier
+                    //
+                    if (Verbose)
+                    {
+                        MiDumperPrint(CalledFromDbg, "'%c%c%c%c'\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\n", Tag[0], Tag[1], Tag[2], Tag[3],
+                                      TableEntry->NonPagedAllocs, TableEntry->NonPagedFrees,
+                                      (TableEntry->NonPagedAllocs - TableEntry->NonPagedFrees), TableEntry->NonPagedBytes,
+                                      TableEntry->PagedAllocs, TableEntry->PagedFrees,
+                                      (TableEntry->PagedAllocs - TableEntry->PagedFrees), TableEntry->PagedBytes);
+                    }
+                    else
+                    {
+                        MiDumperPrint(CalledFromDbg, "'%c%c%c%c'\t\t%ld\t\t%ld\t\t%ld\t\t%ld\n", Tag[0], Tag[1], Tag[2], Tag[3],
+                                      TableEntry->NonPagedAllocs, TableEntry->NonPagedBytes,
+                                      TableEntry->PagedAllocs, TableEntry->PagedBytes);
+                    }
+                }
+                else
+                {
+                    if (Verbose)
+                    {
+                        MiDumperPrint(CalledFromDbg, "%x\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\n", TableEntry->Key,
+                                      TableEntry->NonPagedAllocs, TableEntry->NonPagedFrees,
+                                      (TableEntry->NonPagedAllocs - TableEntry->NonPagedFrees), TableEntry->NonPagedBytes,
+                                      TableEntry->PagedAllocs, TableEntry->PagedFrees,
+                                      (TableEntry->PagedAllocs - TableEntry->PagedFrees), TableEntry->PagedBytes);
+                    }
+                    else
+                    {
+                        MiDumperPrint(CalledFromDbg, "%x\t%ld\t\t%ld\t\t%ld\t\t%ld\n", TableEntry->Key,
+                                      TableEntry->NonPagedAllocs, TableEntry->NonPagedBytes,
+                                      TableEntry->PagedAllocs, TableEntry->PagedBytes);
+                    }
+                }
+            }
+            else if (Tag == 0 || (Tag & Mask) == (TAG_NONE & Mask))
+            {
+                if (Verbose)
+                {
+                    MiDumperPrint(CalledFromDbg, "Anon\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\t\t%ld\n",
+                                  TableEntry->NonPagedAllocs, TableEntry->NonPagedFrees,
+                                  (TableEntry->NonPagedAllocs - TableEntry->NonPagedFrees), TableEntry->NonPagedBytes,
+                                  TableEntry->PagedAllocs, TableEntry->PagedFrees,
+                                  (TableEntry->PagedAllocs - TableEntry->PagedFrees), TableEntry->PagedBytes);
+                }
+                else
+                {
+                    MiDumperPrint(CalledFromDbg, "Anon\t\t%ld\t\t%ld\t\t%ld\t\t%ld\n",
+                                  TableEntry->NonPagedAllocs, TableEntry->NonPagedBytes,
+                                  TableEntry->PagedAllocs, TableEntry->PagedBytes);
+                }
+            }
+        }
+    }
+
+    if (!CalledFromDbg)
+    {
+        DPRINT1("---------------------\n");
+    }
+}
+#endif
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 VOID
@@ -1641,6 +1807,19 @@ ExAllocatePoolWithTag(IN POOL_TYPE PoolType,
         Entry = MiAllocatePoolPages(OriginalType, NumberOfBytes);
         if (!Entry)
         {
+#if DBG
+            //
+            // Out of memory, display current consumption
+            // Let's consider that if the caller wanted more
+            // than a hundred pages, that's a bogus caller
+            // and we are not out of memory
+            //
+            if (NumberOfBytes < 100 * PAGE_SIZE)
+            {
+                MiDumpPoolConsumers(FALSE, 0, 0, 0);
+            }
+#endif
+
             //
             // Must succeed pool is deprecated, but still supported. These allocation
             // failures must cause an immediate bugcheck
@@ -1967,6 +2146,19 @@ ExAllocatePoolWithTag(IN POOL_TYPE PoolType,
     Entry = MiAllocatePoolPages(OriginalType, PAGE_SIZE);
     if (!Entry)
     {
+#if DBG
+        //
+        // Out of memory, display current consumption
+        // Let's consider that if the caller wanted more
+        // than a hundred pages, that's a bogus caller
+        // and we are not out of memory
+        //
+        if (NumberOfBytes < 100 * PAGE_SIZE)
+        {
+            MiDumpPoolConsumers(FALSE, 0, 0, 0);
+        }
+#endif
+
         //
         // Must succeed pool is deprecated, but still supported. These allocation
         // failures must cause an immediate bugcheck
@@ -2815,6 +3007,81 @@ ExpKdbgExtPool(
         Entry = POOL_BLOCK(Entry, Entry->BlockSize);
     }
     while ((Entry->BlockSize != 0) && ((ULONG_PTR)Entry < (ULONG_PTR)PoolPage + PAGE_SIZE));
+
+    return TRUE;
+}
+
+static
+VOID
+ExpKdbgExtPoolUsedGetTag(PCHAR Arg, PULONG Tag, PULONG Mask)
+{
+    CHAR Tmp[4];
+    ULONG Len;
+    USHORT i;
+
+    /* Get the tag */
+    Len = strlen(Arg);
+    if (Len > 4)
+    {
+        Len = 4;
+    }
+
+    /* Generate the mask to have wildcards support */
+    for (i = 0; i < Len; ++i)
+    {
+        Tmp[i] = Arg[i];
+        if (Tmp[i] != '?')
+        {
+            *Mask |= (0xFF << i * 8);
+        }
+    }
+
+    /* Get the tag in the ulong form */
+    *Tag = *((PULONG)Tmp);
+}
+
+BOOLEAN
+ExpKdbgExtPoolUsed(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    ULONG Tag = 0;
+    ULONG Mask = 0;
+    ULONG Flags = 0;
+
+    if (Argc > 1)
+    {
+        /* If we have 2+ args, easy: flags then tag */
+        if (Argc > 2)
+        {
+            ExpKdbgExtPoolUsedGetTag(Argv[2], &Tag, &Mask);
+            if (!KdbpGetHexNumber(Argv[1], &Flags))
+            {
+                KdbpPrint("Invalid parameter: %s\n", Argv[0]);
+            }
+        }
+        else
+        {
+            /* Otherwise, try to find out whether that's flags */
+            if (strlen(Argv[1]) == 1 ||
+                (strlen(Argv[1]) == 3 && Argv[1][0] == '0' && Argv[1][1] == 'x'))
+            {
+                /* Fallback: if reading flags failed, assume it's a tag */
+                if (!KdbpGetHexNumber(Argv[1], &Flags))
+                {
+                    ExpKdbgExtPoolUsedGetTag(Argv[1], &Tag, &Mask);
+                }
+            }
+            /* Or tag */
+            else
+            {
+                ExpKdbgExtPoolUsedGetTag(Argv[1], &Tag, &Mask);
+            }
+        }
+    }
+
+    /* Call the dumper */
+    MiDumpPoolConsumers(TRUE, Tag, Mask, Flags);
 
     return TRUE;
 }

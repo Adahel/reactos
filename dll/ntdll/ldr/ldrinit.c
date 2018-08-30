@@ -10,6 +10,8 @@
 /* INCLUDES *****************************************************************/
 
 #include <ntdll.h>
+#include <compat_undoc.h>
+#include <compatguid_undoc.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -80,7 +82,6 @@ ULONG LdrpActiveUnloadCount;
 VOID NTAPI RtlpInitializeVectoredExceptionHandling(VOID);
 VOID NTAPI RtlpInitDeferedCriticalSection(VOID);
 VOID NTAPI RtlInitializeHeapManager(VOID);
-extern BOOLEAN RtlpPageHeapEnabled;
 
 ULONG RtlpDisableHeapLookaside; // TODO: Move to heap.c
 ULONG RtlpShutdownProcessFlags; // TODO: Use it
@@ -135,7 +136,7 @@ LdrOpenImageFileOptionsKey(IN PUNICODE_STRING SubKey,
     if (NT_SUCCESS(Status))
     {
         /* Write the key handle */
-        if (_InterlockedCompareExchange((LONG*)RootKeyLocation, (LONG)RootKey, 0) != 0)
+        if (InterlockedCompareExchangePointer(RootKeyLocation, RootKey, NULL) != NULL)
         {
             /* Someone already opened it, use it instead */
             NtClose(RootKey);
@@ -459,8 +460,8 @@ LdrpInitSecurityCookie(PLDR_DATA_TABLE_ENTRY LdrEntry)
             NtQueryPerformanceCounter(&Counter, NULL);
 
             NewCookie = Counter.LowPart ^ Counter.HighPart;
-            NewCookie ^= (ULONG)NtCurrentTeb()->ClientId.UniqueProcess;
-            NewCookie ^= (ULONG)NtCurrentTeb()->ClientId.UniqueThread;
+            NewCookie ^= (ULONG_PTR)NtCurrentTeb()->ClientId.UniqueProcess;
+            NewCookie ^= (ULONG_PTR)NtCurrentTeb()->ClientId.UniqueThread;
 
             /* Loop like it's done in KeQueryTickCount(). We don't want to call it directly. */
             while (SharedUserData->SystemTime.High1Time != SharedUserData->SystemTime.High2Time)
@@ -551,30 +552,39 @@ LdrpInitializeThread(IN PCONTEXT Context)
                     RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                            LdrEntry->EntryPointActivationContext);
 
-                    /* Check if it has TLS */
-                    if (LdrEntry->TlsIndex)
+                    _SEH2_TRY
                     {
+                        /* Check if it has TLS */
+                        if (LdrEntry->TlsIndex)
+                        {
+                            /* Make sure we're not shutting down */
+                            if (!LdrpShutdownInProgress)
+                            {
+                                /* Call TLS */
+                                LdrpCallTlsInitializers(LdrEntry, DLL_THREAD_ATTACH);
+                            }
+                        }
+
                         /* Make sure we're not shutting down */
                         if (!LdrpShutdownInProgress)
                         {
-                            /* Call TLS */
-                            LdrpCallTlsInitializers(LdrEntry->DllBase, DLL_THREAD_ATTACH);
+                            /* Call the Entrypoint */
+                            DPRINT("%wZ - Calling entry point at %p for thread attaching, %p/%p\n",
+                                   &LdrEntry->BaseDllName, LdrEntry->EntryPoint,
+                                   NtCurrentTeb()->RealClientId.UniqueProcess,
+                                   NtCurrentTeb()->RealClientId.UniqueThread);
+                            LdrpCallInitRoutine(LdrEntry->EntryPoint,
+                                                LdrEntry->DllBase,
+                                                DLL_THREAD_ATTACH,
+                                                NULL);
                         }
                     }
-
-                    /* Make sure we're not shutting down */
-                    if (!LdrpShutdownInProgress)
+                    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
                     {
-                        /* Call the Entrypoint */
-                        DPRINT("%wZ - Calling entry point at %p for thread attaching, %p/%p\n",
-                                &LdrEntry->BaseDllName, LdrEntry->EntryPoint,
-                                NtCurrentTeb()->RealClientId.UniqueProcess,
-                                NtCurrentTeb()->RealClientId.UniqueThread);
-                        LdrpCallInitRoutine(LdrEntry->EntryPoint,
-                                         LdrEntry->DllBase,
-                                         DLL_THREAD_ATTACH,
-                                         NULL);
+                        DPRINT1("WARNING: Exception 0x%x during LdrpCallInitRoutine(DLL_THREAD_ATTACH) for %wZ\n",
+                                _SEH2_GetExceptionCode(), &LdrEntry->BaseDllName);
                     }
+                    _SEH2_END;
 
                     /* Deactivate the ActCtx */
                     RtlDeactivateActivationContextUnsafeFast(&ActCtx);
@@ -598,8 +608,16 @@ LdrpInitializeThread(IN PCONTEXT Context)
         RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                LdrpImageEntry->EntryPointActivationContext);
 
-        /* Do TLS callbacks */
-        LdrpCallTlsInitializers(Peb->ImageBaseAddress, DLL_THREAD_ATTACH);
+        _SEH2_TRY
+        {
+            /* Do TLS callbacks */
+            LdrpCallTlsInitializers(LdrpImageEntry, DLL_THREAD_ATTACH);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            /* Do nothing */
+        }
+        _SEH2_END;
 
         /* Deactivate the ActCtx */
         RtlDeactivateActivationContextUnsafeFast(&ActCtx);
@@ -795,23 +813,33 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
             RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                    LdrEntry->EntryPointActivationContext);
 
-            /* Check if it has TLS */
-            if (LdrEntry->TlsIndex && Context)
+            _SEH2_TRY
             {
-                /* Call TLS */
-                LdrpCallTlsInitializers(LdrEntry->DllBase, DLL_PROCESS_ATTACH);
-            }
+                /* Check if it has TLS */
+                if (LdrEntry->TlsIndex && Context)
+                {
+                    /* Call TLS */
+                    LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_ATTACH);
+                }
 
-            /* Call the Entrypoint */
-            if (ShowSnaps)
-            {
-                DPRINT1("%wZ - Calling entry point at %p for DLL_PROCESS_ATTACH\n",
-                        &LdrEntry->BaseDllName, EntryPoint);
+                /* Call the Entrypoint */
+                if (ShowSnaps)
+                {
+                    DPRINT1("%wZ - Calling entry point at %p for DLL_PROCESS_ATTACH\n",
+                            &LdrEntry->BaseDllName, EntryPoint);
+                }
+                DllStatus = LdrpCallInitRoutine(EntryPoint,
+                                                LdrEntry->DllBase,
+                                                DLL_PROCESS_ATTACH,
+                                                Context);
             }
-            DllStatus = LdrpCallInitRoutine(EntryPoint,
-                                         LdrEntry->DllBase,
-                                         DLL_PROCESS_ATTACH,
-                                         Context);
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                DllStatus = FALSE;
+                DPRINT1("WARNING: Exception 0x%x during LdrpCallInitRoutine(DLL_PROCESS_ATTACH) for %wZ\n",
+                        _SEH2_GetExceptionCode(), &LdrEntry->BaseDllName);
+            }
+            _SEH2_END;
 
             /* Deactivate the ActCtx */
             RtlDeactivateActivationContextUnsafeFast(&ActCtx);
@@ -861,8 +889,16 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
         RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                LdrpImageEntry->EntryPointActivationContext);
 
-        /* Do TLS callbacks */
-        LdrpCallTlsInitializers(Peb->ImageBaseAddress, DLL_PROCESS_ATTACH);
+        _SEH2_TRY
+        {
+            /* Do TLS callbacks */
+            LdrpCallTlsInitializers(LdrpImageEntry, DLL_PROCESS_ATTACH);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            /* Do nothing */
+        }
+        _SEH2_END;
 
         /* Deactivate the ActCtx */
         RtlDeactivateActivationContextUnsafeFast(&ActCtx);
@@ -957,20 +993,29 @@ LdrShutdownProcess(VOID)
                 RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                        LdrEntry->EntryPointActivationContext);
 
-                /* Check if it has TLS */
-                if (LdrEntry->TlsIndex)
+                _SEH2_TRY
                 {
-                    /* Call TLS */
-                    LdrpCallTlsInitializers(LdrEntry->DllBase, DLL_PROCESS_DETACH);
-                }
+                    /* Check if it has TLS */
+                    if (LdrEntry->TlsIndex)
+                    {
+                        /* Call TLS */
+                        LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_DETACH);
+                    }
 
-                /* Call the Entrypoint */
-                DPRINT("%wZ - Calling entry point at %p for thread detaching\n",
-                        &LdrEntry->BaseDllName, LdrEntry->EntryPoint);
-                LdrpCallInitRoutine(EntryPoint,
-                                 LdrEntry->DllBase,
-                                 DLL_PROCESS_DETACH,
-                                 (PVOID)1);
+                    /* Call the Entrypoint */
+                    DPRINT("%wZ - Calling entry point at %p for thread detaching\n",
+                           &LdrEntry->BaseDllName, LdrEntry->EntryPoint);
+                    LdrpCallInitRoutine(EntryPoint,
+                                        LdrEntry->DllBase,
+                                        DLL_PROCESS_DETACH,
+                                        (PVOID)1);
+                }
+                _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                {
+                    DPRINT1("WARNING: Exception 0x%x during LdrpCallInitRoutine(DLL_PROCESS_DETACH) for %wZ\n",
+                            _SEH2_GetExceptionCode(), &LdrEntry->BaseDllName);
+                }
+                _SEH2_END;
 
                 /* Deactivate the ActCtx */
                 RtlDeactivateActivationContextUnsafeFast(&ActCtx);
@@ -990,8 +1035,16 @@ LdrShutdownProcess(VOID)
         RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                LdrpImageEntry->EntryPointActivationContext);
 
-        /* Do TLS callbacks */
-        LdrpCallTlsInitializers(Peb->ImageBaseAddress, DLL_PROCESS_DETACH);
+        _SEH2_TRY
+        {
+            /* Do TLS callbacks */
+            LdrpCallTlsInitializers(LdrpImageEntry, DLL_PROCESS_DETACH);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            /* Do nothing */
+        }
+        _SEH2_END;
 
         /* Deactivate the ActCtx */
         RtlDeactivateActivationContextUnsafeFast(&ActCtx);
@@ -1065,28 +1118,37 @@ LdrShutdownThread(VOID)
                     RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                            LdrEntry->EntryPointActivationContext);
 
-                    /* Check if it has TLS */
-                    if (LdrEntry->TlsIndex)
+                    _SEH2_TRY
                     {
+                        /* Check if it has TLS */
+                        if (LdrEntry->TlsIndex)
+                        {
+                            /* Make sure we're not shutting down */
+                            if (!LdrpShutdownInProgress)
+                            {
+                                /* Call TLS */
+                                LdrpCallTlsInitializers(LdrEntry, DLL_THREAD_DETACH);
+                            }
+                        }
+
                         /* Make sure we're not shutting down */
                         if (!LdrpShutdownInProgress)
                         {
-                            /* Call TLS */
-                            LdrpCallTlsInitializers(LdrEntry->DllBase, DLL_THREAD_DETACH);
+                            /* Call the Entrypoint */
+                            DPRINT("%wZ - Calling entry point at %p for thread detaching\n",
+                                   &LdrEntry->BaseDllName, LdrEntry->EntryPoint);
+                            LdrpCallInitRoutine(EntryPoint,
+                                                LdrEntry->DllBase,
+                                                DLL_THREAD_DETACH,
+                                                NULL);
                         }
                     }
-
-                    /* Make sure we're not shutting down */
-                    if (!LdrpShutdownInProgress)
+                    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
                     {
-                        /* Call the Entrypoint */
-                        DPRINT("%wZ - Calling entry point at %p for thread detaching\n",
-                                &LdrEntry->BaseDllName, LdrEntry->EntryPoint);
-                        LdrpCallInitRoutine(EntryPoint,
-                                         LdrEntry->DllBase,
-                                         DLL_THREAD_DETACH,
-                                         NULL);
+                        DPRINT1("WARNING: Exception 0x%x during LdrpCallInitRoutine(DLL_THREAD_DETACH) for %wZ\n",
+                                _SEH2_GetExceptionCode(), &LdrEntry->BaseDllName);
                     }
+                    _SEH2_END;
 
                     /* Deactivate the ActCtx */
                     RtlDeactivateActivationContextUnsafeFast(&ActCtx);
@@ -1107,8 +1169,16 @@ LdrShutdownThread(VOID)
         RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                LdrpImageEntry->EntryPointActivationContext);
 
-        /* Do TLS callbacks */
-        LdrpCallTlsInitializers(Peb->ImageBaseAddress, DLL_THREAD_DETACH);
+        _SEH2_TRY
+        {
+            /* Do TLS callbacks */
+            LdrpCallTlsInitializers(LdrpImageEntry, DLL_THREAD_DETACH);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            /* Do nothing */
+        }
+        _SEH2_END;
 
         /* Deactivate the ActCtx */
         RtlDeactivateActivationContextUnsafeFast(&ActCtx);
@@ -1311,26 +1381,6 @@ LdrpFreeTls(VOID)
 
 NTSTATUS
 NTAPI
-LdrpInitializeApplicationVerifierPackage(PUNICODE_STRING ImagePathName, PPEB Peb, BOOLEAN SystemWide, BOOLEAN ReadAdvancedOptions)
-{
-    /* If global flags request DPH, perform some additional actions */
-    if (Peb->NtGlobalFlag & FLG_HEAP_PAGE_ALLOCS)
-    {
-        // TODO: Read advanced DPH flags from the registry if requested
-        if (ReadAdvancedOptions)
-        {
-            UNIMPLEMENTED;
-        }
-
-        /* Enable page heap */
-        RtlpPageHeapEnabled = TRUE;
-    }
-
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
-NTAPI
 LdrpInitializeExecutionOptions(PUNICODE_STRING ImagePathName, PPEB Peb, PHANDLE OptionsKey)
 {
     NTSTATUS Status;
@@ -1422,9 +1472,9 @@ LdrpInitializeExecutionOptions(PUNICODE_STRING ImagePathName, PPEB Peb, PHANDLE 
             GlobalFlag = 0;
 
         /* Call AVRF if necessary */
-        if (Peb->NtGlobalFlag & (FLG_POOL_ENABLE_TAIL_CHECK | FLG_HEAP_PAGE_ALLOCS))
+        if (Peb->NtGlobalFlag & (FLG_APPLICATION_VERIFIER | FLG_HEAP_PAGE_ALLOCS))
         {
-            Status = LdrpInitializeApplicationVerifierPackage(ImagePathName, Peb, TRUE, FALSE);
+            Status = LdrpInitializeApplicationVerifierPackage(KeyHandle, Peb, TRUE, FALSE);
             if (!NT_SUCCESS(Status))
             {
                 DPRINT1("AVRF: LdrpInitializeApplicationVerifierPackage failed with %08X\n", Status);
@@ -1434,10 +1484,10 @@ LdrpInitializeExecutionOptions(PUNICODE_STRING ImagePathName, PPEB Peb, PHANDLE 
     else
     {
         /* There are no image-specific options, so perform global initialization */
-        if (Peb->NtGlobalFlag & (FLG_POOL_ENABLE_TAIL_CHECK | FLG_HEAP_PAGE_ALLOCS))
+        if (Peb->NtGlobalFlag & (FLG_APPLICATION_VERIFIER | FLG_HEAP_PAGE_ALLOCS))
         {
             /* Initialize app verifier package */
-            Status = LdrpInitializeApplicationVerifierPackage(ImagePathName, Peb, TRUE, FALSE);
+            Status = LdrpInitializeApplicationVerifierPackage(KeyHandle, Peb, TRUE, FALSE);
             if (!NT_SUCCESS(Status))
             {
                 DPRINT1("AVRF: LdrpInitializeApplicationVerifierPackage failed with %08X\n", Status);
@@ -1454,6 +1504,97 @@ LdrpValidateImageForMp(IN PLDR_DATA_TABLE_ENTRY LdrDataTableEntry)
 {
     UNIMPLEMENTED;
 }
+
+VOID
+NTAPI
+LdrpInitializeProcessCompat(PVOID* pOldShimData)
+{
+    static const GUID* GuidOrder[] = { &COMPAT_GUID_WIN10, &COMPAT_GUID_WIN81, &COMPAT_GUID_WIN8,
+                                       &COMPAT_GUID_WIN7, &COMPAT_GUID_VISTA };
+    static const DWORD GuidVersions[] = { WINVER_WIN10, WINVER_WIN81, WINVER_WIN8, WINVER_WIN7, WINVER_VISTA };
+
+    ULONG Buffer[(sizeof(COMPATIBILITY_CONTEXT_ELEMENT) * 10 + sizeof(ACTIVATION_CONTEXT_COMPATIBILITY_INFORMATION)) / sizeof(ULONG)];
+    ACTIVATION_CONTEXT_COMPATIBILITY_INFORMATION* ContextCompatInfo;
+    SIZE_T SizeRequired;
+    NTSTATUS Status;
+    DWORD n, cur;
+    ReactOS_ShimData* pShimData = *pOldShimData;
+
+    C_ASSERT(RTL_NUMBER_OF(GuidOrder) == RTL_NUMBER_OF(GuidVersions));
+
+    if (pShimData)
+    {
+        if (pShimData->dwMagic != REACTOS_SHIMDATA_MAGIC ||
+            pShimData->dwSize != sizeof(ReactOS_ShimData))
+        {
+            DPRINT1("LdrpInitializeProcessCompat: Corrupt pShimData (0x%x, %u)\n", pShimData->dwMagic, pShimData->dwSize);
+            return;
+        }
+        if (pShimData->dwRosProcessCompatVersion)
+        {
+            DPRINT1("LdrpInitializeProcessCompat: ProcessCompatVersion already set to 0x%x\n", pShimData->dwRosProcessCompatVersion);
+            return;
+        }
+    }
+
+    SizeRequired = sizeof(Buffer);
+    Status = RtlQueryInformationActivationContext(RTL_QUERY_ACTIVATION_CONTEXT_FLAG_NO_ADDREF,
+                                                  NULL,
+                                                  NULL,
+                                                  CompatibilityInformationInActivationContext,
+                                                  Buffer,
+                                                  sizeof(Buffer),
+                                                  &SizeRequired);
+
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("LdrpInitializeProcessCompat: Unable to query process actctx with status %x\n", Status);
+        return;
+    }
+
+    ContextCompatInfo = (ACTIVATION_CONTEXT_COMPATIBILITY_INFORMATION*)Buffer;
+    /* No Compatibility elements present, bail out */
+    if (ContextCompatInfo->ElementCount == 0)
+        return;
+
+    /* Search for known GUID's, starting from newest to oldest. */
+    for (cur = 0; cur < RTL_NUMBER_OF(GuidOrder); ++cur)
+    {
+        for (n = 0; n < ContextCompatInfo->ElementCount; ++n)
+        {
+            if (ContextCompatInfo->Elements[n].Type == ACTCX_COMPATIBILITY_ELEMENT_TYPE_OS &&
+                RtlCompareMemory(&ContextCompatInfo->Elements[n].Id, GuidOrder[cur], sizeof(GUID)) == sizeof(GUID))
+            {
+                /* If this process did not need shim data before, allocate and store it */
+                if (pShimData == NULL)
+                {
+                    PPEB Peb = NtCurrentPeb();
+
+                    ASSERT(Peb->pShimData == NULL);
+                    pShimData = RtlAllocateHeap(Peb->ProcessHeap, HEAP_ZERO_MEMORY, sizeof(*pShimData));
+
+                    if (!pShimData)
+                    {
+                        DPRINT1("LdrpInitializeProcessCompat: Unable to allocated %u bytes\n", sizeof(*pShimData));
+                        return;
+                    }
+
+                    pShimData->dwSize = sizeof(*pShimData);
+                    pShimData->dwMagic = REACTOS_SHIMDATA_MAGIC;
+
+                    Peb->pShimData = pShimData;
+                    *pOldShimData = pShimData;
+                }
+
+                /* Store the highest found version, and bail out. */
+                pShimData->dwRosProcessCompatVersion = GuidVersions[cur];
+                DPRINT1("LdrpInitializeProcessCompat: Found guid for winver 0x%x\n", GuidVersions[cur]);
+                return;
+            }
+        }
+    }
+}
+
 
 NTSTATUS
 NTAPI
@@ -1542,8 +1683,8 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     /* Save the old Shim Data */
     OldShimData = Peb->pShimData;
 
-    /* Clear it */
-    Peb->pShimData = NULL;
+    /* ReactOS specific: do not clear it. (Windows starts doing the same in later versions) */
+    //Peb->pShimData = NULL;
 
     /* Save the number of processors and CS Timeout */
     LdrpNumberOfProcessors = Peb->NumberOfProcessors;
@@ -1934,6 +2075,9 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     /* Initialize Wine's active context implementation for the current process */
     actctx_init();
 
+    /* ReactOS specific */
+    LdrpInitializeProcessCompat(&OldShimData);
+
     /* Set the current directory */
     Status = RtlSetCurrentDirectory_U(&CurrentDirectory);
     if (!NT_SUCCESS(Status))
@@ -1959,10 +2103,15 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     }
 
     /* Check if the Application Verifier was enabled */
-    if (Peb->NtGlobalFlag & FLG_POOL_ENABLE_TAIL_CHECK)
+    if (Peb->NtGlobalFlag & FLG_APPLICATION_VERIFIER)
     {
-        /* FIXME */
-        DPRINT1("We don't support Application Verifier yet\n");
+        Status = AVrfInitializeVerifier();
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("LDR: AVrfInitializeVerifier failed (ntstatus 0x%x)\n", Status);
+            return Status;
+        }
+
     }
 
     if (IsDotNetImage)

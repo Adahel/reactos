@@ -15,14 +15,14 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 /* Bitmaps */
 IDB_WATERMARK BITMAP "resources/watermark.bmp"
 IDB_HEADER BITMAP "resources/header.bmp"
+IDB_CLASSIC BITMAP "resources/thmclassic.bmp"
+IDB_LAUTUS BITMAP "resources/thmlautus.bmp"
 
 IDI_ICON1 ICON "resources/1.ico"
 IDI_ICON2 ICON "resources/2.ico"
 IDI_ICON3 ICON "resources/3.ico"
 IDI_ICON4 ICON "resources/4.ico"
 IDI_ICON5 ICON "resources/5.ico"
-
-#include <reactos/manifest_dll.rc>
 
 STRINGTABLE
 BEGIN

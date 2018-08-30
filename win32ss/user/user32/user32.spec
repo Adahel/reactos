@@ -675,7 +675,7 @@
 666 stdcall ShowStartGlass(long)
 667 stdcall ShowWindow(long long) NtUserShowWindow
 668 stdcall ShowWindowAsync(long long) NtUserShowWindowAsync
-669 stdcall SoftModalMessageBox(long)
+669 stdcall SoftModalMessageBox(ptr)
 670 stdcall SubtractRect(ptr ptr ptr)
 671 stdcall SwapMouseButton(long)
 672 stdcall SwitchDesktop(long) NtUserSwitchDesktop
@@ -748,26 +748,3 @@
 739 varargs wsprintfW(wstr wstr)
 740 stdcall wvsprintfA(ptr str ptr)
 741 stdcall wvsprintfW(ptr wstr ptr)
-
-
-#Vista Functions
-@ stub CancelShutdown
-@ stub CreateWindowInBand
-@ stub IsThreadDesktopComposited
-@ stub SetWindowCompositionAttribute
-@ stub SwitchDesktopWithFade
-@ stub GetWindowBand
-@ stub GetWindowDisplayAffinity
-@ stub LogicalToPhysicalPoint
-@ stub SetWindowDisplayAffinity
-@ stub WindowFromPhysicalPoint
-@ stub SoundSentry
-@ stub DisplayConfigGetDeviceInfo
-@ stub DisplayConfigSetDeviceInfo
-@ stub GetDisplayConfigBufferSizes
-@ stub IsProcessDPIAware
-@ stub QueryDisplayConfig
-@ stub SetProcessDPIAware
-
-@ stub RegisterSessionPort
-@ stub UnregisterSessionPort

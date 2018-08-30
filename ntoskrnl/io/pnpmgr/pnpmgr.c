@@ -26,21 +26,25 @@ extern ULONG ExpInitializationPhase;
 extern BOOLEAN ExpInTextModeSetup;
 extern BOOLEAN PnpSystemInit;
 
+#define MAX_DEVICE_ID_LEN          200
+#define MAX_SEPARATORS_INSTANCEID  0
+#define MAX_SEPARATORS_DEVICEID    1
+
 /* DATA **********************************************************************/
 
 PDRIVER_OBJECT IopRootDriverObject;
 PIO_BUS_TYPE_GUID_LIST PnpBusTypeGuidList = NULL;
-LIST_ENTRY IopDeviceRelationsRequestList;
-WORK_QUEUE_ITEM IopDeviceRelationsWorkItem;
-BOOLEAN IopDeviceRelationsRequestInProgress;
-KSPIN_LOCK IopDeviceRelationsSpinLock;
+LIST_ENTRY IopDeviceActionRequestList;
+WORK_QUEUE_ITEM IopDeviceActionWorkItem;
+BOOLEAN IopDeviceActionInProgress;
+KSPIN_LOCK IopDeviceActionLock;
 
-typedef struct _INVALIDATE_DEVICE_RELATION_DATA
+typedef struct _DEVICE_ACTION_DATA
 {
     LIST_ENTRY RequestListEntry;
     PDEVICE_OBJECT DeviceObject;
     DEVICE_RELATION_TYPE Type;
-} INVALIDATE_DEVICE_RELATION_DATA, *PINVALIDATE_DEVICE_RELATION_DATA;
+} DEVICE_ACTION_DATA, *PDEVICE_ACTION_DATA;
 
 /* FUNCTIONS *****************************************************************/
 NTSTATUS
@@ -94,7 +98,7 @@ IopInstallCriticalDevice(PDEVICE_NODE DeviceNode)
     PWCHAR IdBuffer, OriginalIdBuffer;
 
     /* Open the device instance key */
-    Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, 0, &InstanceKey);
+    Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, REG_OPTION_NON_VOLATILE, &InstanceKey);
     if (Status != STATUS_SUCCESS)
         return;
 
@@ -448,7 +452,7 @@ IopInitializeDevice(PDEVICE_NODE DeviceNode,
 
    if (DeviceNode->Flags & DNF_LEGACY_DRIVER)
    {
-      DeviceNode->Flags |= DNF_ADDED + DNF_STARTED;
+      DeviceNode->Flags |= (DNF_ADDED | DNF_STARTED);
       return STATUS_SUCCESS;
    }
 
@@ -782,7 +786,7 @@ IopStartDevice(
 {
    NTSTATUS Status;
    HANDLE InstanceHandle = NULL, ControlHandle = NULL;
-   UNICODE_STRING KeyName;
+   UNICODE_STRING KeyName, ValueString;
    OBJECT_ATTRIBUTES ObjectAttributes;
 
    if (DeviceNode->Flags & DNF_DISABLED)
@@ -796,7 +800,7 @@ IopStartDevice(
    IopStartAndEnumerateDevice(DeviceNode);
 
    /* FIX: Should be done in new device instance code */
-   Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, 0, &InstanceHandle);
+   Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, REG_OPTION_NON_VOLATILE, &InstanceHandle);
    if (!NT_SUCCESS(Status))
        goto ByeBye;
 
@@ -813,7 +817,10 @@ IopStartDevice(
        goto ByeBye;
 
    RtlInitUnicodeString(&KeyName, L"ActiveService");
-   Status = ZwSetValueKey(ControlHandle, &KeyName, 0, REG_SZ, DeviceNode->ServiceName.Buffer, DeviceNode->ServiceName.Length);
+   ValueString = DeviceNode->ServiceName;
+   if (!ValueString.Buffer)
+       RtlInitUnicodeString(&ValueString, L"");
+   Status = ZwSetValueKey(ControlHandle, &KeyName, 0, REG_SZ, ValueString.Buffer, ValueString.Length + sizeof(UNICODE_NULL));
    // }
 
 ByeBye:
@@ -869,7 +876,7 @@ IopQueryDeviceCapabilities(PDEVICE_NODE DeviceNode,
    else
        DeviceNode->UserFlags &= ~DNUF_DONT_SHOW_IN_UI;
 
-   Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, 0, &InstanceKey);
+   Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, REG_OPTION_NON_VOLATILE, &InstanceKey);
    if (NT_SUCCESS(Status))
    {
       /* Set 'Capabilities' value */
@@ -902,31 +909,31 @@ IopQueryDeviceCapabilities(PDEVICE_NODE DeviceNode,
 static
 VOID
 NTAPI
-IopDeviceRelationsWorker(
+IopDeviceActionWorker(
     _In_ PVOID Context)
 {
     PLIST_ENTRY ListEntry;
-    PINVALIDATE_DEVICE_RELATION_DATA Data;
+    PDEVICE_ACTION_DATA Data;
     KIRQL OldIrql;
 
-    KeAcquireSpinLock(&IopDeviceRelationsSpinLock, &OldIrql);
-    while (!IsListEmpty(&IopDeviceRelationsRequestList))
+    KeAcquireSpinLock(&IopDeviceActionLock, &OldIrql);
+    while (!IsListEmpty(&IopDeviceActionRequestList))
     {
-        ListEntry = RemoveHeadList(&IopDeviceRelationsRequestList);
-        KeReleaseSpinLock(&IopDeviceRelationsSpinLock, OldIrql);
+        ListEntry = RemoveHeadList(&IopDeviceActionRequestList);
+        KeReleaseSpinLock(&IopDeviceActionLock, OldIrql);
         Data = CONTAINING_RECORD(ListEntry,
-                                 INVALIDATE_DEVICE_RELATION_DATA,
+                                 DEVICE_ACTION_DATA,
                                  RequestListEntry);
 
         IoSynchronousInvalidateDeviceRelations(Data->DeviceObject,
                                                Data->Type);
 
         ObDereferenceObject(Data->DeviceObject);
-        ExFreePool(Data);
-        KeAcquireSpinLock(&IopDeviceRelationsSpinLock, &OldIrql);
+        ExFreePoolWithTag(Data, TAG_IO);
+        KeAcquireSpinLock(&IopDeviceActionLock, &OldIrql);
     }
-    IopDeviceRelationsRequestInProgress = FALSE;
-    KeReleaseSpinLock(&IopDeviceRelationsSpinLock, OldIrql);
+    IopDeviceActionInProgress = FALSE;
+    KeReleaseSpinLock(&IopDeviceActionLock, OldIrql);
 }
 
 NTSTATUS
@@ -1063,7 +1070,7 @@ IopCreateDeviceNode(PDEVICE_NODE ParentNode,
 
    if (!PhysicalDeviceObject)
    {
-      FullServiceName.MaximumLength = LegacyPrefix.Length + ServiceName1->Length;
+      FullServiceName.MaximumLength = LegacyPrefix.Length + ServiceName1->Length + sizeof(UNICODE_NULL);
       FullServiceName.Length = 0;
       FullServiceName.Buffer = ExAllocatePool(PagedPool, FullServiceName.MaximumLength);
       if (!FullServiceName.Buffer)
@@ -1074,6 +1081,7 @@ IopCreateDeviceNode(PDEVICE_NODE ParentNode,
 
       RtlAppendUnicodeStringToString(&FullServiceName, &LegacyPrefix);
       RtlAppendUnicodeStringToString(&FullServiceName, ServiceName1);
+      RtlUpcaseUnicodeString(&FullServiceName, &FullServiceName, FALSE);
 
       Status = PnpRootCreateDevice(&FullServiceName, NULL, &PhysicalDeviceObject, &Node->InstancePath);
       if (!NT_SUCCESS(Status))
@@ -1093,7 +1101,9 @@ IopCreateDeviceNode(PDEVICE_NODE ParentNode,
           return Status;
       }
 
-      Node->ServiceName.Buffer = ExAllocatePool(PagedPool, ServiceName1->Length);
+      Node->ServiceName.MaximumLength = ServiceName1->Length + sizeof(UNICODE_NULL);
+      Node->ServiceName.Length = 0;
+      Node->ServiceName.Buffer = ExAllocatePool(PagedPool, Node->ServiceName.MaximumLength);
       if (!Node->ServiceName.Buffer)
       {
           ZwClose(InstanceHandle);
@@ -1102,39 +1112,39 @@ IopCreateDeviceNode(PDEVICE_NODE ParentNode,
           return Status;
       }
 
-      Node->ServiceName.MaximumLength = ServiceName1->Length;
-      Node->ServiceName.Length = 0;
-
-      RtlAppendUnicodeStringToString(&Node->ServiceName, ServiceName1);
+      RtlCopyUnicodeString(&Node->ServiceName, ServiceName1);
 
       if (ServiceName)
       {
           RtlInitUnicodeString(&KeyName, L"Service");
-          Status = ZwSetValueKey(InstanceHandle, &KeyName, 0, REG_SZ, ServiceName->Buffer, ServiceName->Length);
+          Status = ZwSetValueKey(InstanceHandle, &KeyName, 0, REG_SZ, ServiceName->Buffer, ServiceName->Length + sizeof(UNICODE_NULL));
       }
 
       if (NT_SUCCESS(Status))
       {
           RtlInitUnicodeString(&KeyName, L"Legacy");
-
           LegacyValue = 1;
           Status = ZwSetValueKey(InstanceHandle, &KeyName, 0, REG_DWORD, &LegacyValue, sizeof(LegacyValue));
+
+          RtlInitUnicodeString(&KeyName, L"ConfigFlags");
+          LegacyValue = 0;
+          ZwSetValueKey(InstanceHandle, &KeyName, 0, REG_DWORD, &LegacyValue, sizeof(LegacyValue));
+
           if (NT_SUCCESS(Status))
           {
               RtlInitUnicodeString(&KeyName, L"Class");
-
-              RtlInitUnicodeString(&ClassName, L"LegacyDriver\0");
+              RtlInitUnicodeString(&ClassName, L"LegacyDriver");
               Status = ZwSetValueKey(InstanceHandle, &KeyName, 0, REG_SZ, ClassName.Buffer, ClassName.Length + sizeof(UNICODE_NULL));
               if (NT_SUCCESS(Status))
               {
                   RtlInitUnicodeString(&KeyName, L"ClassGUID");
-
-                  RtlInitUnicodeString(&ClassGUID, L"{8ECC055D-047F-11D1-A537-0000F8753ED1}\0");
+                  RtlInitUnicodeString(&ClassGUID, L"{8ECC055D-047F-11D1-A537-0000F8753ED1}");
                   Status = ZwSetValueKey(InstanceHandle, &KeyName, 0, REG_SZ, ClassGUID.Buffer, ClassGUID.Length + sizeof(UNICODE_NULL));
                   if (NT_SUCCESS(Status))
                   {
+                      // FIXME: Retrieve the real "description" by looking at the "DisplayName" string
+                      // of the corresponding CurrentControlSet\Services\xxx entry for this driver.
                       RtlInitUnicodeString(&KeyName, L"DeviceDesc");
-
                       Status = ZwSetValueKey(InstanceHandle, &KeyName, 0, REG_SZ, ServiceName1->Buffer, ServiceName1->Length + sizeof(UNICODE_NULL));
                   }
               }
@@ -1760,6 +1770,97 @@ cleanup:
     return Status;
 }
 
+static
+BOOLEAN
+IopValidateID(
+    _In_ PWCHAR Id,
+    _In_ BUS_QUERY_ID_TYPE QueryType)
+{
+    PWCHAR PtrChar;
+    PWCHAR StringEnd;
+    WCHAR Char;
+    ULONG SeparatorsCount = 0;
+    PWCHAR PtrPrevChar = NULL;
+    ULONG MaxSeparators;
+    BOOLEAN IsMultiSz;
+
+    PAGED_CODE();
+
+    switch (QueryType)
+    {
+        case BusQueryDeviceID:
+            MaxSeparators = MAX_SEPARATORS_DEVICEID;
+            IsMultiSz = FALSE;
+            break;
+        case BusQueryInstanceID:
+            MaxSeparators = MAX_SEPARATORS_INSTANCEID;
+            IsMultiSz = FALSE;
+            break;
+
+        case BusQueryHardwareIDs:
+        case BusQueryCompatibleIDs:
+            MaxSeparators = MAX_SEPARATORS_DEVICEID;
+            IsMultiSz = TRUE;
+            break;
+
+        default:
+            DPRINT1("IopValidateID: Not handled QueryType - %x\n", QueryType);
+            return FALSE;
+    }
+
+    StringEnd = Id + MAX_DEVICE_ID_LEN;
+
+    for (PtrChar = Id; PtrChar < StringEnd; PtrChar++)
+    {
+        Char = *PtrChar;
+
+        if (Char == UNICODE_NULL)
+        {
+            if (!IsMultiSz || (PtrPrevChar && PtrChar == PtrPrevChar + 1))
+            {
+                if (MaxSeparators == SeparatorsCount || IsMultiSz)
+                {
+                    return TRUE;
+                }
+
+                DPRINT1("IopValidateID: SeparatorsCount - %lu, MaxSeparators - %lu\n",
+                        SeparatorsCount, MaxSeparators);
+                goto ErrorExit;
+            }
+
+            StringEnd = PtrChar + MAX_DEVICE_ID_LEN + 1;
+            PtrPrevChar = PtrChar;
+            SeparatorsCount = 0;
+        }
+        else if (Char < ' ' || Char > 0x7F || Char == ',')
+        {
+            DPRINT1("IopValidateID: Invalid character - %04X\n", Char);
+            goto ErrorExit;
+        }
+        else if (Char == ' ')
+        {
+            *PtrChar = '_';
+        }
+        else if (Char == '\\')
+        {
+            SeparatorsCount++;
+
+            if (SeparatorsCount > MaxSeparators)
+            {
+                DPRINT1("IopValidateID: SeparatorsCount - %lu, MaxSeparators - %lu\n",
+                        SeparatorsCount, MaxSeparators);
+                goto ErrorExit;
+            }
+        }
+    }
+
+    DPRINT1("IopValidateID: Not terminated ID\n");
+
+ErrorExit:
+    // FIXME logging
+    return FALSE;
+}
+ 
 NTSTATUS
 IopQueryHardwareIds(PDEVICE_NODE DeviceNode,
                     HANDLE InstanceKey)
@@ -1770,6 +1871,7 @@ IopQueryHardwareIds(PDEVICE_NODE DeviceNode,
    UNICODE_STRING ValueName;
    NTSTATUS Status;
    ULONG Length, TotalLength;
+   BOOLEAN IsValidID;
 
    DPRINT("Sending IRP_MN_QUERY_ID.BusQueryHardwareIDs to device stack\n");
 
@@ -1781,11 +1883,15 @@ IopQueryHardwareIds(PDEVICE_NODE DeviceNode,
                               &Stack);
    if (NT_SUCCESS(Status))
    {
-      /*
-       * FIXME: Check for valid characters, if there is invalid characters
-       * then bugcheck.
-       */
+      IsValidID = IopValidateID((PWCHAR)IoStatusBlock.Information, BusQueryHardwareIDs);
+
+      if (!IsValidID)
+      {
+         DPRINT1("Invalid HardwareIDs. DeviceNode - %p\n", DeviceNode);
+      }
+
       TotalLength = 0;
+
       Ptr = (PWSTR)IoStatusBlock.Information;
       DPRINT("Hardware IDs:\n");
       while (*Ptr)
@@ -1829,6 +1935,7 @@ IopQueryCompatibleIds(PDEVICE_NODE DeviceNode,
    UNICODE_STRING ValueName;
    NTSTATUS Status;
    ULONG Length, TotalLength;
+   BOOLEAN IsValidID;
 
    DPRINT("Sending IRP_MN_QUERY_ID.BusQueryCompatibleIDs to device stack\n");
 
@@ -1841,11 +1948,15 @@ IopQueryCompatibleIds(PDEVICE_NODE DeviceNode,
       &Stack);
    if (NT_SUCCESS(Status) && IoStatusBlock.Information)
    {
-      /*
-      * FIXME: Check for valid characters, if there is invalid characters
-      * then bugcheck.
-      */
+      IsValidID = IopValidateID((PWCHAR)IoStatusBlock.Information, BusQueryCompatibleIDs);
+
+      if (!IsValidID)
+      {
+         DPRINT1("Invalid CompatibleIDs. DeviceNode - %p\n", DeviceNode);
+      }
+
       TotalLength = 0;
+
       Ptr = (PWSTR)IoStatusBlock.Information;
       DPRINT("Compatible IDs:\n");
       while (*Ptr)
@@ -1891,6 +2002,7 @@ IopCreateDeviceInstancePath(
     NTSTATUS Status;
     UNICODE_STRING ParentIdPrefix = { 0, 0, NULL };
     DEVICE_CAPABILITIES DeviceCapabilities;
+    BOOLEAN IsValidID;
 
     DPRINT("Sending IRP_MN_QUERY_ID.BusQueryDeviceID to device stack\n");
 
@@ -1905,13 +2017,15 @@ IopCreateDeviceInstancePath(
         return Status;
     }
 
+    IsValidID = IopValidateID((PWCHAR)IoStatusBlock.Information, BusQueryDeviceID);
+
+    if (!IsValidID)
+    {
+        DPRINT1("Invalid DeviceID. DeviceNode - %p\n", DeviceNode);
+    }
+
     /* Save the device id string */
     RtlInitUnicodeString(&DeviceId, (PWSTR)IoStatusBlock.Information);
-
-    /*
-     * FIXME: Check for valid characters, if there is invalid characters
-     * then bugcheck.
-     */
 
     DPRINT("Sending IRP_MN_QUERY_CAPABILITIES to device stack (after enumeration)\n");
 
@@ -1960,6 +2074,16 @@ IopCreateDeviceInstancePath(
     {
         DPRINT("IopInitiatePnpIrp(BusQueryInstanceID) failed (Status %lx)\n", Status);
         ASSERT(IoStatusBlock.Information == 0);
+    }
+
+    if (IoStatusBlock.Information)
+    {
+        IsValidID = IopValidateID((PWCHAR)IoStatusBlock.Information, BusQueryInstanceID);
+
+        if (!IsValidID)
+        {
+            DPRINT1("Invalid InstanceID. DeviceNode - %p\n", DeviceNode);
+        }
     }
 
     RtlInitUnicodeString(&InstanceId,
@@ -2011,7 +2135,6 @@ IopCreateDeviceInstancePath(
 
     return STATUS_SUCCESS;
 }
-
 
 /*
  * IopActionInterrogateDeviceStack
@@ -2127,7 +2250,7 @@ IopActionInterrogateDeviceStack(PDEVICE_NODE DeviceNode,
     /*
      * Create registry key for the instance id, if it doesn't exist yet
      */
-    Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, 0, &InstanceKey);
+    Status = IopCreateDeviceKeyPath(&DeviceNode->InstancePath, REG_OPTION_NON_VOLATILE, &InstanceKey);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to create the instance key! (Status %lx)\n", Status);
@@ -2602,10 +2725,7 @@ IopActionConfigureChildServices(PDEVICE_NODE DeviceNode,
              DeviceCaps.RawDeviceOK)
          {
             DPRINT("%wZ is using parent bus driver (%wZ)\n", &DeviceNode->InstancePath, &ParentDeviceNode->ServiceName);
-
-            DeviceNode->ServiceName.Length = 0;
-            DeviceNode->ServiceName.MaximumLength = 0;
-            DeviceNode->ServiceName.Buffer = NULL;
+            RtlInitEmptyUnicodeString(&DeviceNode->ServiceName, NULL, 0);
          }
          else if (ClassGUID.Length != 0)
          {
@@ -4772,10 +4892,12 @@ IoInvalidateDeviceRelations(
     IN PDEVICE_OBJECT DeviceObject,
     IN DEVICE_RELATION_TYPE Type)
 {
-    PINVALIDATE_DEVICE_RELATION_DATA Data;
+    PDEVICE_ACTION_DATA Data;
     KIRQL OldIrql;
 
-    Data = ExAllocatePool(NonPagedPool, sizeof(INVALIDATE_DEVICE_RELATION_DATA));
+    Data = ExAllocatePoolWithTag(NonPagedPool,
+                                 sizeof(DEVICE_ACTION_DATA),
+                                 TAG_IO);
     if (!Data)
         return;
 
@@ -4783,20 +4905,20 @@ IoInvalidateDeviceRelations(
     Data->DeviceObject = DeviceObject;
     Data->Type = Type;
 
-    KeAcquireSpinLock(&IopDeviceRelationsSpinLock, &OldIrql);
-    InsertTailList(&IopDeviceRelationsRequestList, &Data->RequestListEntry);
-    if (IopDeviceRelationsRequestInProgress)
+    KeAcquireSpinLock(&IopDeviceActionLock, &OldIrql);
+    InsertTailList(&IopDeviceActionRequestList, &Data->RequestListEntry);
+    if (IopDeviceActionInProgress)
     {
-        KeReleaseSpinLock(&IopDeviceRelationsSpinLock, OldIrql);
+        KeReleaseSpinLock(&IopDeviceActionLock, OldIrql);
         return;
     }
-    IopDeviceRelationsRequestInProgress = TRUE;
-    KeReleaseSpinLock(&IopDeviceRelationsSpinLock, OldIrql);
+    IopDeviceActionInProgress = TRUE;
+    KeReleaseSpinLock(&IopDeviceActionLock, OldIrql);
 
-    ExInitializeWorkItem(&IopDeviceRelationsWorkItem,
-                         IopDeviceRelationsWorker,
+    ExInitializeWorkItem(&IopDeviceActionWorkItem,
+                         IopDeviceActionWorker,
                          NULL);
-    ExQueueWorkItem(&IopDeviceRelationsWorkItem,
+    ExQueueWorkItem(&IopDeviceActionWorkItem,
                     DelayedWorkQueue);
 }
 

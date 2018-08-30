@@ -469,7 +469,8 @@ BOOL wined3d_dxtn_init(void)
         "libtxc_dxtn.dylib",
         "libtxc_dxtn_s2tc.dylib",
 #endif
-        "winetxc.dll"
+        "libtxc_dxtn.so",
+        "libtxc_dxtn_s2tc.so.0"
     };
     int i;
 

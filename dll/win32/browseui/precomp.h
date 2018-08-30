@@ -21,6 +21,8 @@
 #include <atlbase.h>
 #include <atlcom.h>
 #include <atlwin.h>
+#include <atlsimpcoll.h>
+#include <atlstr.h>
 #include <undocuser.h>
 #include <perhist.h>
 #include <exdispid.h>
@@ -34,6 +36,7 @@
 
 #include "resource.h"
 
+#include "ACLCustomMRU.h"
 #include "aclistisf.h"
 #include "aclmulti.h"
 #include "addressband.h"
@@ -42,6 +45,7 @@
 #include "bandproxy.h"
 #include "shellbars/CBandSite.h"
 #include "shellbars/CBandSiteMenu.h"
+#include "shellbars/CISFBand.h"
 #include "brandband.h"
 #include "internettoolbar.h"
 #include "commonbrowser.h"

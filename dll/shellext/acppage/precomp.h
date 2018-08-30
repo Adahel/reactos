@@ -16,6 +16,8 @@
 #include <atlcom.h>
 #include <atlsimpcoll.h>
 #include <atlstr.h>
+#include <atlwin.h>
+#include <rosdlgs.h>
 
 ULONG DbgPrint(PCH Format,...);
 #include <apphelp.h>
@@ -25,6 +27,8 @@ extern HMODULE g_hModule;
 extern LONG g_ModuleRefCnt;
 
 EXTERN_C BOOL WINAPI GetExeFromLnk(PCWSTR pszLnk, PWSTR pszExe, size_t cchSize);
+
+BOOL IsBuiltinLayer(PCWSTR Name);
 
 #include "resource.h"
 #include "CLayerStringList.hpp"

@@ -25,6 +25,7 @@ Signature = "$ReactOS$"
 6 = inf
 7 = bin
 8 = bin\testdata
+80 = bin\suppl
 9 = media
 10 = Microsoft.NET
 11 = Microsoft.NET\Framework
@@ -70,6 +71,15 @@ Signature = "$ReactOS$"
 51 = system32\CatRoot
 52 = system32\CatRoot2
 53 = AppPatch
+54 = winsxs
+55 = winsxs\manifests
+56 = winsxs\x86_microsoft.windows.common-controls_6595b64144ccf1df_5.82.2600.2982_none_deadbeef
+57 = winsxs\x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef
+58 = winsxs\x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef
+59 = winsxs\x86_reactos.apisets_6595b64144ccf1df_1.0.0.0_none_deadbeef
+60 = winsxs\x86_reactos.newapi_6595b64144ccf1df_1.0.0.0_none_deadbeef
+61 = winsxs\x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.14393.0_none_deadbeef
+62 = Resources\Themes\Modern
 
 .InfEnd
 
@@ -81,9 +91,16 @@ Signature = "$ReactOS$"
 ; Optional/proprietary files
 "modules/optional/DroidSansFallback.ttf"              3  optional
 "modules/optional/NOTICE_for_Droid_Font.txt"          4  optional
-"modules/optional/netkvm2k.inf"                       6  optional
-"modules/optional/netkvm2k.cat"                       6  optional
+"modules/optional/netkvm.inf"                         6  optional
+"modules/optional/netkvm.cat"                         6  optional
 "modules/optional/netkvm.sys"                         2  optional
+"modules/optional/viostor.inf"                        6  optional
+"modules/optional/viostor.cat"                        6  optional
+"modules/optional/viostor.sys"                        2  optional
+"modules/optional/qxl.inf"                            6  optional
+"modules/optional/qxl.cat"                            6  optional
+"modules/optional/qxl.sys"                            2  optional
+"modules/optional/qxldd.dll"                          1  optional
 "modules/optional/b57win32.inf"                       6  optional
 "modules/optional/b57win32.cat"                       6  optional
 "modules/optional/b57xp32.sys"                        2  optional

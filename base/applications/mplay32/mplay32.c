@@ -963,8 +963,8 @@ BuildFileFilterAndDeviceMenu(VOID)
     DWORD dwPosition = 0;
     DWORD i;
     DWORD j;
-    UINT uSizeRemain;
-    UINT uMaskRemain;
+    size_t uSizeRemain;
+    size_t uMaskRemain;
     HKEY hKey = NULL;
 
     /* Always load the default (all files) filter */
@@ -1473,6 +1473,16 @@ _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCmdLine, INT nCmdShow)
     HANDLE hAccel;
 
     hInstance = hInst;
+    
+    switch (GetUserDefaultUILanguage())
+    {
+        case MAKELANGID(LANG_HEBREW, SUBLANG_DEFAULT):
+            SetProcessDefaultLayout(LAYOUT_RTL);
+            break;
+
+        default:
+            break;
+    }
 
     LoadString(hInstance, IDS_APPTITLE, szAppTitle, ARRAYSIZE(szAppTitle));
 

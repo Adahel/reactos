@@ -22,13 +22,13 @@ DBG_DEFAULT_CHANNEL(UserWinpos);
     (SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE | SWP_NOZORDER)
 #define  SWP_AGG_STATUSFLAGS \
     (SWP_AGG_NOPOSCHANGE | SWP_FRAMECHANGED | SWP_HIDEWINDOW | SWP_SHOWWINDOW)
+#define SWP_AGG_NOCLIENTCHANGE \
+    (SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE)
 
 #define EMPTYPOINT(pt) ((pt).x == -1 && (pt).y == -1)
 #define PLACE_MIN               0x0001
 #define PLACE_MAX               0x0002
 #define PLACE_RECT              0x0004
-
-VOID FASTCALL IntLinkWindow(PWND Wnd,PWND WndInsertAfter);
 
 /* FUNCTIONS *****************************************************************/
 
@@ -1263,7 +1263,8 @@ co_WinPosDoWinPosChanging(PWND Window,
 
    /* Send WM_WINDOWPOSCHANGING message */
 
-   if (!(WinPos->flags & SWP_NOSENDCHANGING))
+   if (!(WinPos->flags & SWP_NOSENDCHANGING)
+          && !((WinPos->flags & SWP_AGG_NOCLIENTCHANGE) && (WinPos->flags & SWP_SHOWWINDOW)))
    {
       TRACE("Sending WM_WINDOWPOSCHANGING to hwnd %p flags %04x.\n", Window->head.h,WinPos->flags);
       co_IntSendMessage(Window->head.h, WM_WINDOWPOSCHANGING, 0, (LPARAM) WinPos);
@@ -2105,11 +2106,32 @@ co_WinPosSetWindowPos(
       WinPos.flags |= SWP_NOZORDER|SWP_NOREDRAW;
    }
 
+   if(!(flags & SWP_DEFERERASE))
+   {
+       /* erase parent when hiding or resizing child */
+       if ((flags & SWP_HIDEWINDOW) ||
+         (!(flags & SWP_SHOWWINDOW) &&
+          (WinPos.flags & SWP_AGG_STATUSFLAGS) != SWP_AGG_NOGEOMETRYCHANGE))
+       {
+           PWND Parent = Window->spwndParent;
+           if (!Parent || UserIsDesktopWindow(Parent)) Parent = Window;
+           UserSyncAndPaintWindows( Parent, RDW_ERASENOW);
+       }
+
+       /* Give newly shown windows a chance to redraw */
+       if(((WinPos.flags & SWP_AGG_STATUSFLAGS) != SWP_AGG_NOPOSCHANGE)
+                && !(flags & SWP_AGG_NOCLIENTCHANGE) && (flags & SWP_SHOWWINDOW))
+       {
+           UserSyncAndPaintWindows( Window, RDW_ERASENOW);
+       }
+   }
+
    /* And last, send the WM_WINDOWPOSCHANGED message */
 
    TRACE("\tstatus hwnd %p flags = %04x\n",Window?Window->head.h:NULL,WinPos.flags & SWP_AGG_STATUSFLAGS);
 
-   if ((WinPos.flags & SWP_AGG_STATUSFLAGS) != SWP_AGG_NOPOSCHANGE)
+   if (((WinPos.flags & SWP_AGG_STATUSFLAGS) != SWP_AGG_NOPOSCHANGE)
+            && !((flags & SWP_AGG_NOCLIENTCHANGE) && (flags & SWP_SHOWWINDOW)))
    {
       /* WM_WINDOWPOSCHANGED is sent even if SWP_NOSENDCHANGING is set
          and always contains final window position.
@@ -2253,11 +2275,11 @@ co_WinPosMinMaximize(PWND Wnd, UINT ShowFlag, RECT* NewPos)
 
                WinPosFindIconPos(Wnd, &wpl.ptMinPosition);
 
-               /*if (!(old_style & WS_MINIMIZE))
+               if (!(old_style & WS_MINIMIZE))
                {
                   SwpFlags |= SWP_STATECHANGED;
                   IntShowOwnedPopups(Wnd, FALSE);
-               }*/
+               }
 
                RECTL_vSetRect(NewPos, wpl.ptMinPosition.x, wpl.ptMinPosition.y,
                              wpl.ptMinPosition.x + UserGetSystemMetrics(SM_CXMINIMIZED),
@@ -2303,7 +2325,7 @@ co_WinPosMinMaximize(PWND Wnd, UINT ShowFlag, RECT* NewPos)
                old_style = IntSetStyle( Wnd, 0, WS_MINIMIZE | WS_MAXIMIZE );
                if (old_style & WS_MINIMIZE)
                {
-                  //IntShowOwnedPopups(Wnd, TRUE);
+                  IntShowOwnedPopups(Wnd, TRUE);
 
                   if (Wnd->InternalPos.flags & WPF_RESTORETOMAXIMIZED)
                   {

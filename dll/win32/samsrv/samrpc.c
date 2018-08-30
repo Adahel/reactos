@@ -2393,7 +2393,7 @@ done:
     SampRegCloseKey(&NamesKeyHandle);
     SampRegCloseKey(&GroupsKeyHandle);
 
-    if ((Status == STATUS_SUCCESS) && (MoreEntries == TRUE))
+    if ((Status == STATUS_SUCCESS) && (MoreEntries != FALSE))
         Status = STATUS_MORE_ENTRIES;
 
     RtlReleaseResource(&SampResource);
@@ -3004,7 +3004,7 @@ done:
     SampRegCloseKey(&NamesKeyHandle);
     SampRegCloseKey(&UsersKeyHandle);
 
-    if ((Status == STATUS_SUCCESS) && (MoreEntries == TRUE))
+    if ((Status == STATUS_SUCCESS) && (MoreEntries != FALSE))
         Status = STATUS_MORE_ENTRIES;
 
     RtlReleaseResource(&SampResource);
@@ -3385,7 +3385,7 @@ done:
     SampRegCloseKey(&NamesKeyHandle);
     SampRegCloseKey(&AliasesKeyHandle);
 
-    if ((Status == STATUS_SUCCESS) && (MoreEntries == TRUE))
+    if ((Status == STATUS_SUCCESS) && (MoreEntries != FALSE))
         Status = STATUS_MORE_ENTRIES;
 
     RtlReleaseResource(&SampResource);
@@ -3537,6 +3537,9 @@ TRACE("Open %S\n", MemberSidString);
 
             SampRegCloseKey(&MemberKeyHandle);
         }
+
+        if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+            Status = STATUS_SUCCESS;
 
         LocalFree(MemberSidString);
     }
@@ -7976,7 +7979,7 @@ SampSetUserAll(PSAM_DB_OBJECT UserObject,
                                         Buffer->All.SecurityDescriptor.Length);
     }
 
-    if (WriteFixedData == TRUE)
+    if (WriteFixedData != FALSE)
     {
         Status = SampSetObjectAttribute(UserObject,
                                         L"F",
@@ -8306,7 +8309,7 @@ SamrChangePasswordUser(IN SAMPR_HANDLE UserHandle,
     }
 
     /* Check if we can change the password at this time */
-    if ((StoredNtEmpty == FALSE) || (StoredNtEmpty == FALSE))
+    if ((StoredLmEmpty == FALSE) || (StoredNtEmpty == FALSE))
     {
         /* Get fixed domain data */
         Length = sizeof(SAM_DOMAIN_FIXED_DATA);

@@ -18,7 +18,20 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <stdarg.h>
+
+#define COBJMACROS
+
+#include "windef.h"
+#include "winbase.h"
+#include "ole2.h"
+#include "winsxs.h"
+
+#include "wine/debug.h"
+#include "wine/unicode.h"
 #include "sxs_private.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(sxs);
 
 struct name
 {
@@ -160,9 +173,9 @@ static HRESULT WINAPI name_Reserved(
     DWORD cbReserved,
     LPVOID *ppReserved )
 {
-    FIXME("%p, %s, %p, %p, %s, %x%08x, %p, %d, %p\n", iface,
+    FIXME("%p, %s, %p, %p, %s, %s, %p, %d, %p\n", iface,
           debugstr_guid(riid), pUnkReserved1, pUnkReserved2,
-          debugstr_w(szReserved), (DWORD)(llReserved >> 32), (DWORD)llReserved,
+          debugstr_w(szReserved), wine_dbgstr_longlong(llReserved),
           pvReserved, cbReserved, ppReserved);
     return E_NOTIMPL;
 }

@@ -93,7 +93,7 @@
 @ stub I_NetServerPasswordSet2
 @ stub I_NetServerPasswordSet
 @ stub I_NetServerReqChallenge
-@ stub I_NetServerSetServiceBits
+@ stdcall I_NetServerSetServiceBits(wstr wstr long long)
 @ stub I_NetServerSetServiceBitsEx
 @ stub I_NetServerTrustPasswordsGet
 @ stub I_NetlogonComputeClientDigest
@@ -114,14 +114,14 @@
 @ stdcall NetConfigGetAll(wstr wstr ptr)
 @ stdcall NetConfigSet(wstr wstr wstr long long ptr long)
 @ stdcall NetConnectionEnum(wstr wstr long ptr long ptr ptr ptr)
-@ stub NetDfsAdd
-@ stub NetDfsAddFtRoot
-@ stub NetDfsAddStdRoot
-@ stub NetDfsAddStdRootForced
-@ stub NetDfsEnum
-@ stub NetDfsGetClientInfo
+@ stdcall NetDfsAdd(wstr wstr wstr wstr long)
+@ stdcall NetDfsAddFtRoot(wstr wstr wstr wstr long)
+@ stdcall NetDfsAddStdRoot(wstr wstr wstr long)
+@ stdcall NetDfsAddStdRootForced(wstr wstr wstr wstr)
+@ stdcall NetDfsEnum(wstr long long ptr ptr ptr)
+@ stdcall NetDfsGetClientInfo(wstr wstr wstr long ptr)
 @ stub NetDfsGetDcAddress
-@ stub NetDfsGetFtContainerSecurity
+@ stdcall NetDfsGetFtContainerSecurity(wstr long ptr ptr);
 @ stub NetDfsGetInfo
 @ stub NetDfsGetSecurity
 @ stub NetDfsGetStdContainerSecurity
@@ -149,7 +149,7 @@
 @ stdcall NetFileGetInfo(wstr long long ptr)
 @ stdcall NetGetAnyDCName(wstr wstr ptr)
 @ stdcall NetGetDCName(wstr wstr ptr)
-@ stub NetGetDisplayInformationIndex
+@ stdcall NetGetDisplayInformationIndex(wstr long wstr ptr)
 @ stdcall NetGetJoinInformation(wstr ptr ptr)
 @ stdcall NetGetJoinableOUs(wstr wstr wstr wstr ptr ptr)
 @ stdcall NetGroupAdd(wstr long ptr ptr)
@@ -174,7 +174,7 @@
 @ stdcall NetLocalGroupSetInfo(wstr wstr long ptr ptr)
 @ stdcall NetLocalGroupSetMembers(wstr wstr long ptr long)
 @ stub NetLogonGetTimeServiceParentDomain
-@ stub NetLogonSetServiceBits
+@ stdcall NetLogonSetServiceBits(wstr long long)
 @ stdcall NetMessageBufferSend(wstr wstr wstr ptr long)
 @ stdcall NetMessageNameAdd(wstr wstr)
 @ stdcall NetMessageNameDel(wstr wstr)

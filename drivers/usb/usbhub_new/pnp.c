@@ -1,3 +1,10 @@
+/*
+ * PROJECT:     ReactOS USB Hub Driver
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     USBHub plug and play functions
+ * COPYRIGHT:   Copyright 2017 Vadim Galyant <vgal@rambler.ru>
+ */
+
 #include "usbhub.h"
 
 #define NDEBUG
@@ -1129,10 +1136,6 @@ EnumStart:
     {
         PortData = &HubExtension->PortData[Port - 1];
 
-        DPRINT_ENUM("USBH_FdoQueryBusRelations: Port - %x, ConnectStatus - %x\n",
-                    Port,
-                    PortData->PortStatus.PortStatus.Usb20PortStatus.CurrentConnectStatus);
-
         if (HubExtension->HubFlags & USBHUB_FDO_FLAG_DEVICE_FAILED)
         {
             continue;
@@ -1145,10 +1148,15 @@ EnumStart:
 
         if (!NT_SUCCESS(Status))
         {
+            DPRINT_ENUM("USBH_FdoQueryBusRelations: Status - %X\n", Status);
             HubExtension->HubFlags |= USBHUB_FDO_FLAG_DEVICE_FAILED;
             DeviceRelations->Count = 0;
             goto EnumStart;
         }
+
+        DPRINT_ENUM("USBH_FdoQueryBusRelations: Port - %x, ConnectStatus - %x\n",
+                    Port,
+                    PortData->PortStatus.PortStatus.Usb20PortStatus.CurrentConnectStatus);
 
         PdoDevice = PortData->DeviceObject;
 
@@ -1569,12 +1577,13 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
 
             if (PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_INIT_PORT_FAILED)
             {
+                DPRINT("USBH_PdoQueryId: USBHUB_PDO_FLAG_INIT_PORT_FAILED\n");
                 RtlStringCbPrintfExW(Buffer,
                                      Remaining,
                                      NULL,
                                      &Remaining,
                                      0,
-                                     L"USB\\Vid_0000&Pid0000");
+                                     L"USB\\Vid_0000&Pid_0000");
             }
             else
             {
@@ -1606,6 +1615,8 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
 
             if (PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_INIT_PORT_FAILED)
             {
+                DPRINT("USBH_PdoQueryId: USBHUB_PDO_FLAG_INIT_PORT_FAILED\n");
+
                 RtlStringCbPrintfExW(Buffer,
                                      Remaining,
                                      NULL,
@@ -1665,6 +1676,8 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
 
             if (PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_INIT_PORT_FAILED)
             {
+                DPRINT("USBH_PdoQueryId: USBHUB_PDO_FLAG_INIT_PORT_FAILED\n");
+
                 RtlStringCbPrintfExW(Buffer,
                                      Remaining,
                                      NULL,

@@ -1,9 +1,8 @@
 /*
- * COPYRIGHT:       See COPYING in the top level directory
- * PROJECT:         ReactOS Shim library
- * FILE:            dll/appcompat/shims/shimlib/shimlib.c
- * PURPOSE:         Shim helper functions
- * PROGRAMMER:      Mark Jansen (mark.jansen@reactos.org)
+ * PROJECT:     ReactOS Shim helper library
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     Shim helper functions
+ * COPYRIGHT:   Copyright 2016-2018 Mark Jansen (mark.jansen@reactos.org)
  */
 
 #define WIN32_NO_STATUS
@@ -51,11 +50,16 @@ void ShimLib_ShimFree(PVOID pData)
     HeapFree(g_ShimLib_Heap, 0, pData);
 }
 
+PCSTR ShimLib_StringNDuplicateA(PCSTR szString, SIZE_T stringLengthIncludingNullTerm)
+{
+    PSTR NewString = ShimLib_ShimMalloc(stringLengthIncludingNullTerm);
+    StringCchCopyA(NewString, stringLengthIncludingNullTerm, szString);
+    return NewString;
+}
+
 PCSTR ShimLib_StringDuplicateA(PCSTR szString)
 {
-    SIZE_T Length = lstrlenA(szString);
-    PSTR NewString = ShimLib_ShimMalloc(Length+1);
-    return lstrcpyA(NewString, szString);
+    return ShimLib_StringNDuplicateA(szString, lstrlenA(szString) + 1);
 }
 
 BOOL ShimLib_StrAEqualsW(PCSTR szString, PCWSTR wszString)
@@ -156,7 +160,7 @@ VOID SeiInitDebugSupport(VOID)
     static const UNICODE_STRING DebugKey = RTL_CONSTANT_STRING(L"SHIM_DEBUG_LEVEL");
     UNICODE_STRING DebugValue;
     NTSTATUS Status;
-    ULONG NewLevel = 0;
+    ULONG NewLevel = SEI_MSG;
     WCHAR Buffer[40];
 
     RtlInitEmptyUnicodeString(&DebugValue, Buffer, sizeof(Buffer));

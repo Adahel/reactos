@@ -28,7 +28,10 @@ PsReferenceProcessFilePointer(IN PEPROCESS Process,
     PAGED_CODE();
 
     /* Lock the process */
-    ExAcquireRundownProtection(&Process->RundownProtect);
+    if (!ExAcquireRundownProtection(&Process->RundownProtect))
+    {
+        return STATUS_PROCESS_IS_TERMINATING;
+    }
 
     /* Get the section */
     Section = Process->SectionObject;
@@ -79,6 +82,7 @@ NtQueryInformationProcess(IN HANDLE ProcessHandle,
     PUNICODE_STRING ImageName;
     ULONG Cookie, ExecuteOptions = 0;
     ULONG_PTR Wow64 = 0;
+    PROCESS_VALUES ProcessValues;
     PAGED_CODE();
 
     /* Check for user-mode caller */
@@ -248,15 +252,12 @@ NtQueryInformationProcess(IN HANDLE ProcessHandle,
                                                NULL);
             if (!NT_SUCCESS(Status)) break;
 
+            /* Query IO counters from the process */
+            KeQueryValuesProcess(&Process->Pcb, &ProcessValues);
+
             _SEH2_TRY
             {
-                /* FIXME: Call KeQueryValuesProcess */
-                IoCounters->ReadOperationCount = Process->ReadOperationCount.QuadPart;
-                IoCounters->ReadTransferCount = Process->ReadTransferCount.QuadPart;
-                IoCounters->WriteOperationCount = Process->WriteOperationCount.QuadPart;
-                IoCounters->WriteTransferCount = Process->WriteTransferCount.QuadPart;
-                IoCounters->OtherOperationCount = Process->OtherOperationCount.QuadPart;
-                IoCounters->OtherTransferCount = Process->OtherTransferCount.QuadPart;
+                RtlCopyMemory(IoCounters, &ProcessValues.IoInfo, sizeof(IO_COUNTERS));
             }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {
@@ -563,7 +564,7 @@ NtQueryInformationProcess(IN HANDLE ProcessHandle,
         /* DOS Device Map */
         case ProcessDeviceMap:
 
-            if (ProcessInformationLength != sizeof(PROCESS_DEVICEMAP_INFORMATION))
+            if (ProcessInformationLength != RTL_FIELD_SIZE(PROCESS_DEVICEMAP_INFORMATION, Query))
             {
                 if (ProcessInformationLength == sizeof(PROCESS_DEVICEMAP_INFORMATION_EX))
                 {
@@ -2415,6 +2416,19 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
             {
                 PspClearCrossThreadFlag(Thread, CT_BREAK_ON_TERMINATION_BIT);
             }
+            break;
+
+        case ThreadHideFromDebugger:
+
+            /* Check buffer length */
+            if (ThreadInformationLength != 0)
+            {
+                Status = STATUS_INFO_LENGTH_MISMATCH;
+                break;
+            }
+
+            /* Set the flag */
+            PspSetCrossThreadFlag(Thread, CT_HIDE_FROM_DEBUGGER_BIT);
             break;
 
         default:

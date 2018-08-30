@@ -12,11 +12,6 @@
 
 /* FUNCTIONS ********************************************************/
 
-int widthSetInDlg;
-int heightSetInDlg;
-
-STRETCHSKEW stretchSkew;
-
 POINT start;
 POINT last;
 
@@ -264,26 +259,68 @@ _tWinMain (HINSTANCE hThisInstance, HINSTANCE hPrevInstance, LPTSTR lpszArgument
     RECT imageAreaPos = {3, 3, 3 + imageModel.GetWidth(), 3 + imageModel.GetHeight()};
     imageArea.Create(scrlClientWindow.m_hWnd, imageAreaPos, NULL, WS_CHILD | WS_VISIBLE);
 
-    if (lpszArgument[0] != 0)
+    if (__argc >= 2)
     {
-        HBITMAP bmNew = NULL;
-        LoadDIBFromFile(&bmNew, lpszArgument, &fileTime, &fileSize, &fileHPPM, &fileVPPM);
-        if (bmNew != NULL)
+        WIN32_FIND_DATAW find;
+        HANDLE hFind = FindFirstFileW(__targv[1], &find);
+        if (hFind != INVALID_HANDLE_VALUE)
         {
-            TCHAR *temp;
-            imageModel.Insert(bmNew);
-            GetFullPathName(lpszArgument, SIZEOF(filepathname), filepathname, &temp);
-            CPath pathFileName(filepathname);
-            pathFileName.StripPath();
-            CString strTitle;
-            strTitle.Format(IDS_WINDOWTITLE, (LPCTSTR)pathFileName);
-            mainWindow.SetWindowText(strTitle);
-            imageModel.ClearHistory();
-            isAFile = TRUE;
+            FindClose(hFind);
+
+            // check the file size
+            if (find.nFileSizeHigh || find.nFileSizeLow)
+            {
+                // load it now
+                HBITMAP bmNew = NULL;
+                LoadDIBFromFile(&bmNew, __targv[1], &fileTime, &fileSize, &fileHPPM, &fileVPPM);
+                if (bmNew)
+                {
+                    // valid bitmap file
+                    GetFullPathName(__targv[1], SIZEOF(filepathname), filepathname, NULL);
+                    imageModel.Insert(bmNew);
+                    CPath pathFileName(filepathname);
+                    pathFileName.StripPath();
+
+                    CString strTitle;
+                    strTitle.Format(IDS_WINDOWTITLE, (LPCTSTR)pathFileName);
+                    mainWindow.SetWindowText(strTitle);
+
+                    imageModel.ClearHistory();
+
+                    isAFile = TRUE;
+                    registrySettings.SetMostRecentFile(filepathname);
+                }
+                else
+                {
+                    // cannot open and not empty
+                    CStringW strText;
+                    strText.Format(IDS_LOADERRORTEXT, __targv[1]);
+                    MessageBoxW(NULL, strText, NULL, MB_ICONERROR);
+                }
+            }
+            else
+            {
+                // open the empty file
+                GetFullPathName(__targv[1], SIZEOF(filepathname), filepathname, NULL);
+                CPath pathFileName(filepathname);
+                pathFileName.StripPath();
+
+                CString strTitle;
+                strTitle.Format(IDS_WINDOWTITLE, (LPCTSTR)pathFileName);
+                mainWindow.SetWindowText(strTitle);
+
+                imageModel.ClearHistory();
+
+                isAFile = TRUE;
+                registrySettings.SetMostRecentFile(filepathname);
+            }
         }
         else
         {
-            exit(0);
+            // does not exist
+            CStringW strText;
+            strText.Format(IDS_LOADERRORTEXT, __targv[1]);
+            MessageBoxW(NULL, strText, NULL, MB_ICONERROR);
         }
     }
 

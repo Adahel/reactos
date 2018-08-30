@@ -21,6 +21,11 @@
  *
  */
 
+#include "config.h"
+#include "wine/port.h"
+
+#include <stdio.h>
+
 #include "d3dcompiler_private.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3dcompiler);
@@ -552,7 +557,7 @@ HRESULT dxbc_add_section(struct dxbc *dxbc, DWORD tag, const char *data, DWORD d
     return S_OK;
 }
 
-HRESULT dxbc_init(struct dxbc *dxbc, UINT size)
+HRESULT dxbc_init(struct dxbc *dxbc, DWORD size)
 {
     TRACE("dxbc %p, size %u.\n", dxbc, size);
 

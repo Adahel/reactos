@@ -18,8 +18,20 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "editor.h"
+#include "config.h"
+#include "wine/port.h"
 
+#define COBJMACROS
+
+#include "editor.h"
+#include "ole2.h"
+#include "oleauto.h"
+#include "richole.h"
+#include "tom.h"
+#include "imm.h"
+#include "textserv.h"
+#include "wine/debug.h"
+#include "editstr.h"
 
 #ifdef __i386__  /* thiscall functions are i386-specific */
 
@@ -401,9 +413,7 @@ HRESULT WINAPI CreateTextServices(IUnknown  *pUnkOuter, ITextHost *pITextHost, I
    ITextImpl->pMyHost = pITextHost;
    ITextImpl->IUnknown_inner.lpVtbl = &textservices_inner_vtbl;
    ITextImpl->ITextServices_iface.lpVtbl = &textservices_vtbl;
-   ITextImpl->editor = ME_MakeEditor(pITextHost, FALSE, ES_LEFT);
-   ITextImpl->editor->exStyleFlags = 0;
-   SetRectEmpty(&ITextImpl->editor->rcFormat);
+   ITextImpl->editor = ME_MakeEditor(pITextHost, FALSE);
 
    if (pUnkOuter)
       ITextImpl->outer_unk = pUnkOuter;

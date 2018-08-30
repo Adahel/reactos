@@ -31,8 +31,7 @@ CNewMenu::CNewMenu() :
     m_pLinkItem(NULL),
     m_pSite(NULL),
     m_hiconFolder(NULL),
-    m_hiconLink(NULL),
-    m_idCmdFirst(0)
+    m_hiconLink(NULL)
 {
 }
 
@@ -405,7 +404,7 @@ CNewMenu::SHELLNEW_ITEM *CNewMenu::FindItemFromIdOffset(UINT IdOffset)
     return pItem;
 }
 
-HRESULT CNewMenu::SelectNewItem(LPCMINVOKECOMMANDINFO lpici, LONG wEventId, UINT uFlags, LPWSTR pszName)
+HRESULT CNewMenu::SelectNewItem(LONG wEventId, UINT uFlags, LPWSTR pszName)
 {
     CComPtr<IShellBrowser> lpSB;
     CComPtr<IShellView> lpSV;
@@ -416,16 +415,13 @@ HRESULT CNewMenu::SelectNewItem(LPCMINVOKECOMMANDINFO lpici, LONG wEventId, UINT
     /* Notify the view object about the new item */
     SHChangeNotify(wEventId, uFlags, (LPCVOID) pszName, NULL);
 
-    /* FIXME: I think that this can be implemented using callbacks to the shell folder */
+    if (!m_pSite)
+        return S_OK;
 
-    /* Note: CWM_GETISHELLBROWSER returns shell browser without adding reference */
-    lpSB = (LPSHELLBROWSER)SendMessageA(lpici->hwnd, CWM_GETISHELLBROWSER, 0, 0);
-    if (!lpSB)
-        return E_FAIL;
-
-    hr = lpSB->QueryActiveShellView(&lpSV);
-    if (FAILED(hr))
-        return hr;
+    /* Get a pointer to the shell view */
+    hr = IUnknown_QueryService(m_pSite, SID_IFolderView, IID_PPV_ARG(IShellView, &lpSV));
+    if (FAILED_UNEXPECTEDLY(hr))
+        return S_OK;
 
     /* Attempt to get the pidl of the new item */
     hr = SHILCreateFromPathW(pszName, &pidl, NULL);
@@ -467,7 +463,7 @@ HRESULT CNewMenu::CreateNewFolder(LPCMINVOKECOMMANDINFO lpici)
         return E_FAIL;
 
     /* Show and select the new item in the def view */
-    SelectNewItem(lpici, SHCNE_MKDIR, SHCNF_PATHW, wszName);
+    SelectNewItem(SHCNE_MKDIR, SHCNF_PATHW, wszName);
 
     return S_OK;
 }
@@ -573,7 +569,7 @@ HRESULT CNewMenu::CreateNewItem(SHELLNEW_ITEM *pItem, LPCMINVOKECOMMANDINFO lpcm
             if (bSuccess)
             {
                 TRACE("Notifying fs %s\n", debugstr_w(wszName));
-                SelectNewItem(lpcmi, SHCNE_CREATE, SHCNF_PATHW, wszName);
+                SelectNewItem(SHCNE_CREATE, SHCNF_PATHW, wszName);
             }
             else
             {
@@ -613,8 +609,6 @@ CNewMenu::QueryContextMenu(HMENU hMenu,
     WCHAR wszNew[200];
     MENUITEMINFOW mii;
     UINT cItems = 0;
-
-    m_idCmdFirst = idCmdFirst;
 
     TRACE("%p %p %u %u %u %u\n", this,
           hMenu, indexMenu, idCmdFirst, idCmdLast, uFlags);
@@ -711,7 +705,7 @@ CNewMenu::HandleMenuMsg2(UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *plRes
             if (!lpdis || lpdis->CtlType != ODT_MENU)
                 break;
 
-            DWORD id = LOWORD(lpdis->itemID) - m_idCmdFirst;
+            DWORD id = LOWORD(lpdis->itemID);
             HICON hIcon = 0;
             if (id == 0)
                 hIcon = m_hiconFolder;  

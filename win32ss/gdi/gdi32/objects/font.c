@@ -448,35 +448,34 @@ GetCharacterPlacementW(
     UINT i, nSet;
     DPRINT("GetCharacterPlacementW\n");
 
-    if(dwFlags&(~GCP_REORDER)) DPRINT("flags 0x%08lx ignored\n", dwFlags);
-    if(lpResults->lpClass) DPRINT("classes not implemented\n");
+    if (dwFlags&(~GCP_REORDER)) DPRINT("flags 0x%08lx ignored\n", dwFlags);
+    if (lpResults->lpClass) DPRINT("classes not implemented\n");
     if (lpResults->lpCaretPos && (dwFlags & GCP_REORDER))
         DPRINT("Caret positions for complex scripts not implemented\n");
 
     nSet = (UINT)uCount;
-    if(nSet > lpResults->nGlyphs)
+    if (nSet > lpResults->nGlyphs)
         nSet = lpResults->nGlyphs;
 
     /* return number of initialized fields */
     lpResults->nGlyphs = nSet;
 
-    /*if((dwFlags&GCP_REORDER)==0 || !BidiAvail)
-      {*/
+    if (dwFlags & GCP_REORDER)
+    {
+        if (LoadLPK(LPK_GCP))
+            return LpkGetCharacterPlacement(hdc, lpString, uCount, nMaxExtent, lpResults, dwFlags, 0);
+    }
+
     /* Treat the case where no special handling was requested in a fastpath way */
-    /* copy will do if the GCP_REORDER flag is not set */
-    if(lpResults->lpOutString)
+    /* copy will do if the GCP_REORDER flag is not set */ 
+    if (lpResults->lpOutString)
         lstrcpynW( lpResults->lpOutString, lpString, nSet );
 
-    if(lpResults->lpOrder)
+    if (lpResults->lpOrder)
     {
-        for(i = 0; i < nSet; i++)
+        for (i = 0; i < nSet; i++)
             lpResults->lpOrder[i] = i;
     }
-    /*} else
-      {
-          BIDI_Reorder( lpString, uCount, dwFlags, WINE_GCPW_FORCE_LTR, lpResults->lpOutString,
-                        nSet, lpResults->lpOrder );
-      }*/
 
     /* FIXME: Will use the placement chars */
     if (lpResults->lpDx)
@@ -1098,19 +1097,19 @@ GetOutlineTextMetricsA(
     needed = sizeof(OUTLINETEXTMETRICA);
     if(lpOTMW->otmpFamilyName)
         needed += WideCharToMultiByte(CP_ACP, 0,
-                                      (WCHAR*)((char*)lpOTMW + (int)lpOTMW->otmpFamilyName), -1,
+                                      (WCHAR*)((char*)lpOTMW + (intptr_t)lpOTMW->otmpFamilyName), -1,
                                       NULL, 0, NULL, NULL);
     if(lpOTMW->otmpFaceName)
         needed += WideCharToMultiByte(CP_ACP, 0,
-                                      (WCHAR*)((char*)lpOTMW + (int)lpOTMW->otmpFaceName), -1,
+                                      (WCHAR*)((char*)lpOTMW + (intptr_t)lpOTMW->otmpFaceName), -1,
                                       NULL, 0, NULL, NULL);
     if(lpOTMW->otmpStyleName)
         needed += WideCharToMultiByte(CP_ACP, 0,
-                                      (WCHAR*)((char*)lpOTMW + (int)lpOTMW->otmpStyleName), -1,
+                                      (WCHAR*)((char*)lpOTMW + (intptr_t)lpOTMW->otmpStyleName), -1,
                                       NULL, 0, NULL, NULL);
     if(lpOTMW->otmpFullName)
         needed += WideCharToMultiByte(CP_ACP, 0,
-                                      (WCHAR*)((char*)lpOTMW + (int)lpOTMW->otmpFullName), -1,
+                                      (WCHAR*)((char*)lpOTMW + (intptr_t)lpOTMW->otmpFullName), -1,
                                       NULL, 0, NULL, NULL);
 
     if(!lpOTM)
@@ -1169,7 +1168,7 @@ GetOutlineTextMetricsA(
     {
         output->otmpFamilyName = (LPSTR)(ptr - (char*)output);
         len = WideCharToMultiByte(CP_ACP, 0,
-                                  (WCHAR*)((char*)lpOTMW + (int)lpOTMW->otmpFamilyName), -1,
+                                  (WCHAR*)((char*)lpOTMW + (intptr_t)lpOTMW->otmpFamilyName), -1,
                                   ptr, left, NULL, NULL);
         left -= len;
         ptr += len;
@@ -1181,7 +1180,7 @@ GetOutlineTextMetricsA(
     {
         output->otmpFaceName = (LPSTR)(ptr - (char*)output);
         len = WideCharToMultiByte(CP_ACP, 0,
-                                  (WCHAR*)((char*)lpOTMW + (int)lpOTMW->otmpFaceName), -1,
+                                  (WCHAR*)((char*)lpOTMW + (intptr_t)lpOTMW->otmpFaceName), -1,
                                   ptr, left, NULL, NULL);
         left -= len;
         ptr += len;
@@ -1193,7 +1192,7 @@ GetOutlineTextMetricsA(
     {
         output->otmpStyleName = (LPSTR)(ptr - (char*)output);
         len = WideCharToMultiByte(CP_ACP, 0,
-                                  (WCHAR*)((char*)lpOTMW + (int)lpOTMW->otmpStyleName), -1,
+                                  (WCHAR*)((char*)lpOTMW + (intptr_t)lpOTMW->otmpStyleName), -1,
                                   ptr, left, NULL, NULL);
         left -= len;
         ptr += len;
@@ -1205,7 +1204,7 @@ GetOutlineTextMetricsA(
     {
         output->otmpFullName = (LPSTR)(ptr - (char*)output);
         len = WideCharToMultiByte(CP_ACP, 0,
-                                  (WCHAR*)((char*)lpOTMW + (int)lpOTMW->otmpFullName), -1,
+                                  (WCHAR*)((char*)lpOTMW + (intptr_t)lpOTMW->otmpFullName), -1,
                                   ptr, left, NULL, NULL);
         left -= len;
     }
@@ -2123,7 +2122,8 @@ NewEnumFontFamiliesExW(
     LPARAM lParam,
     DWORD dwFlags)
 {
-    ULONG_PTR idEnum, cbDataSize, cbRetSize;
+    ULONG_PTR idEnum;
+    ULONG cbDataSize, cbRetSize;
     PENUMFONTDATAW pEfdw;
     PBYTE pBuffer;
     PBYTE pMax;

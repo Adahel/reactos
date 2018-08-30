@@ -36,6 +36,17 @@
  * any purpose whatsoever.
  */
 
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <assert.h>
+
+#include "windef.h"
+#include "winbase.h"
+#include "wine/debug.h"
+
 #include "editor.h"
 #include "rtf.h"
 
@@ -1366,7 +1377,7 @@ static RTFKey	rtfKey[] =
 	{ rtfCharAttr,	rtfSuperScrShrink,	"super",	0 },
 	{ rtfCharAttr,	rtfInvisible,		"v",		0 },
 	{ rtfCharAttr,	rtfForeColor,		"cf",		0 },
-	{ rtfCharAttr,	rtfBackColor,		"cb",		0 },
+	{ rtfCharAttr,	rtfBackColor,		"highlight",	0 },
 	{ rtfCharAttr,	rtfRTLChar,		"rtlch",	0 },
 	{ rtfCharAttr,	rtfLTRChar,		"ltrch",	0 },
 	{ rtfCharAttr,	rtfCharStyleNum,	"cs",		0 },

@@ -22,10 +22,33 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#define NONAMELESSUNION
+
+#include "ws2tcpip.h"
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#include "windef.h"
+#include "winbase.h"
+#include "winuser.h"
+#include "wininet.h"
+#include "winineti.h"
+#include "winerror.h"
+#include "winreg.h"
+#include "shlwapi.h"
+#include "shlobj.h"
+#include "shellapi.h"
+
 #include "internet.h"
 
-#include <shlobj.h>
-#include <shellapi.h>
+#include "wine/unicode.h"
+#include "wine/debug.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(wininet);
 
 static const char urlcache_ver_prefix[] = "WINE URLCache Ver ";
 static const char urlcache_ver[] = "0.2012001";
@@ -3424,8 +3447,8 @@ HANDLE WINAPI FindFirstUrlCacheEntryExA(
   LPVOID lpReserved3
 )
 {
-    FIXME("(%s, 0x%08x, 0x%08x, 0x%08x%08x, %p, %p, %p, %p, %p) stub\n", debugstr_a(lpszUrlSearchPattern),
-          dwFlags, dwFilter, (ULONG)(GroupId >> 32), (ULONG)GroupId, lpFirstCacheEntryInfo,
+    FIXME("(%s, 0x%08x, 0x%08x, 0x%s, %p, %p, %p, %p, %p) stub\n", debugstr_a(lpszUrlSearchPattern),
+          dwFlags, dwFilter, wine_dbgstr_longlong(GroupId), lpFirstCacheEntryInfo,
           lpdwFirstCacheEntryInfoBufferSize, lpReserved, pcbReserved2,lpReserved3);
     SetLastError(ERROR_FILE_NOT_FOUND);
     return NULL;
@@ -3443,8 +3466,8 @@ HANDLE WINAPI FindFirstUrlCacheEntryExW(
   LPVOID lpReserved3
 )
 {
-    FIXME("(%s, 0x%08x, 0x%08x, 0x%08x%08x, %p, %p, %p, %p, %p) stub\n", debugstr_w(lpszUrlSearchPattern),
-          dwFlags, dwFilter, (ULONG)(GroupId >> 32), (ULONG)GroupId, lpFirstCacheEntryInfo,
+    FIXME("(%s, 0x%08x, 0x%08x, 0x%s, %p, %p, %p, %p, %p) stub\n", debugstr_w(lpszUrlSearchPattern),
+          dwFlags, dwFilter, wine_dbgstr_longlong(GroupId), lpFirstCacheEntryInfo,
           lpdwFirstCacheEntryInfoBufferSize, lpReserved, pcbReserved2,lpReserved3);
     SetLastError(ERROR_FILE_NOT_FOUND);
     return NULL;
@@ -3720,8 +3743,8 @@ INTERNETAPI GROUPID WINAPI CreateUrlCacheGroup(DWORD dwFlags, LPVOID lpReserved)
  */
 BOOL WINAPI DeleteUrlCacheGroup(GROUPID GroupId, DWORD dwFlags, LPVOID lpReserved)
 {
-    FIXME("(0x%08x%08x, 0x%08x, %p) stub\n",
-          (ULONG)(GroupId >> 32), (ULONG)GroupId, dwFlags, lpReserved);
+    FIXME("(0x%s, 0x%08x, %p) stub\n",
+          wine_dbgstr_longlong(GroupId), dwFlags, lpReserved);
     return FALSE;
 }
 
@@ -3743,8 +3766,8 @@ BOOL WINAPI SetUrlCacheEntryGroupA(LPCSTR lpszUrlName, DWORD dwFlags,
   GROUPID GroupId, LPBYTE pbGroupAttributes, DWORD cbGroupAttributes,
   LPVOID lpReserved)
 {
-    FIXME("(%s, 0x%08x, 0x%08x%08x, %p, 0x%08x, %p) stub\n",
-          debugstr_a(lpszUrlName), dwFlags, (ULONG)(GroupId >> 32), (ULONG)GroupId,
+    FIXME("(%s, 0x%08x, 0x%s, %p, 0x%08x, %p) stub\n",
+          debugstr_a(lpszUrlName), dwFlags, wine_dbgstr_longlong(GroupId),
           pbGroupAttributes, cbGroupAttributes, lpReserved);
     SetLastError(ERROR_FILE_NOT_FOUND);
     return FALSE;
@@ -3758,8 +3781,8 @@ BOOL WINAPI SetUrlCacheEntryGroupW(LPCWSTR lpszUrlName, DWORD dwFlags,
   GROUPID GroupId, LPBYTE pbGroupAttributes, DWORD cbGroupAttributes,
   LPVOID lpReserved)
 {
-    FIXME("(%s, 0x%08x, 0x%08x%08x, %p, 0x%08x, %p) stub\n",
-          debugstr_w(lpszUrlName), dwFlags, (ULONG)(GroupId >> 32), (ULONG)GroupId,
+    FIXME("(%s, 0x%08x, 0x%s, %p, 0x%08x, %p) stub\n",
+          debugstr_w(lpszUrlName), dwFlags, wine_dbgstr_longlong(GroupId),
           pbGroupAttributes, cbGroupAttributes, lpReserved);
     SetLastError(ERROR_FILE_NOT_FOUND);
     return FALSE;
@@ -3789,8 +3812,8 @@ BOOL WINAPI GetUrlCacheGroupAttributeA( GROUPID gid, DWORD dwFlags, DWORD dwAttr
                                         LPINTERNET_CACHE_GROUP_INFOA lpGroupInfo,
                                         LPDWORD lpdwGroupInfo, LPVOID lpReserved )
 {
-    FIXME("(0x%08x%08x, 0x%08x, 0x%08x, %p, %p, %p) stub\n",
-          (ULONG)(gid >> 32), (ULONG)gid, dwFlags, dwAttributes, lpGroupInfo,
+    FIXME("(0x%s, 0x%08x, 0x%08x, %p, %p, %p) stub\n",
+          wine_dbgstr_longlong(gid), dwFlags, dwAttributes, lpGroupInfo,
           lpdwGroupInfo, lpReserved);
     return FALSE;
 }
@@ -3799,8 +3822,8 @@ BOOL WINAPI GetUrlCacheGroupAttributeW( GROUPID gid, DWORD dwFlags, DWORD dwAttr
                                         LPINTERNET_CACHE_GROUP_INFOW lpGroupInfo,
                                         LPDWORD lpdwGroupInfo, LPVOID lpReserved )
 {
-    FIXME("(0x%08x%08x, 0x%08x, 0x%08x, %p, %p, %p) stub\n",
-          (ULONG)(gid >> 32), (ULONG)gid, dwFlags, dwAttributes, lpGroupInfo,
+    FIXME("(0x%s, 0x%08x, 0x%08x, %p, %p, %p) stub\n",
+          wine_dbgstr_longlong(gid), dwFlags, dwAttributes, lpGroupInfo,
           lpdwGroupInfo, lpReserved);
     return FALSE;
 }
@@ -3808,16 +3831,16 @@ BOOL WINAPI GetUrlCacheGroupAttributeW( GROUPID gid, DWORD dwFlags, DWORD dwAttr
 BOOL WINAPI SetUrlCacheGroupAttributeA( GROUPID gid, DWORD dwFlags, DWORD dwAttributes,
                                         LPINTERNET_CACHE_GROUP_INFOA lpGroupInfo, LPVOID lpReserved )
 {
-    FIXME("(0x%08x%08x, 0x%08x, 0x%08x, %p, %p) stub\n",
-          (ULONG)(gid >> 32), (ULONG)gid, dwFlags, dwAttributes, lpGroupInfo, lpReserved);
+    FIXME("(0x%s, 0x%08x, 0x%08x, %p, %p) stub\n",
+          wine_dbgstr_longlong(gid), dwFlags, dwAttributes, lpGroupInfo, lpReserved);
     return TRUE;
 }
 
 BOOL WINAPI SetUrlCacheGroupAttributeW( GROUPID gid, DWORD dwFlags, DWORD dwAttributes,
                                         LPINTERNET_CACHE_GROUP_INFOW lpGroupInfo, LPVOID lpReserved )
 {
-    FIXME("(0x%08x%08x, 0x%08x, 0x%08x, %p, %p) stub\n",
-          (ULONG)(gid >> 32), (ULONG)gid, dwFlags, dwAttributes, lpGroupInfo, lpReserved);
+    FIXME("(0x%s, 0x%08x, 0x%08x, %p, %p) stub\n",
+          wine_dbgstr_longlong(gid), dwFlags, dwAttributes, lpGroupInfo, lpReserved);
     return TRUE;
 }
 

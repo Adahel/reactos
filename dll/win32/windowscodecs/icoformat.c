@@ -16,9 +16,24 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include "config.h"
+
+#include <stdarg.h>
+
+#define COBJMACROS
+
+#include "windef.h"
+#include "winbase.h"
+#include "wingdi.h"
+#include "objbase.h"
+
 #include "wincodecs_private.h"
 
-#include <pshpack1.h>
+#include "wine/debug.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(wincodecs);
+
+#include "pshpack1.h"
 
 typedef struct {
     BYTE bWidth;
@@ -38,7 +53,7 @@ typedef struct
     WORD idCount;
 } ICONHEADER;
 
-#include <poppack.h>
+#include "poppack.h"
 
 typedef struct {
     IWICBitmapDecoder IWICBitmapDecoder_iface;
@@ -541,20 +556,9 @@ static HRESULT WINAPI IcoDecoder_GetContainerFormat(IWICBitmapDecoder *iface,
 static HRESULT WINAPI IcoDecoder_GetDecoderInfo(IWICBitmapDecoder *iface,
     IWICBitmapDecoderInfo **ppIDecoderInfo)
 {
-    HRESULT hr;
-    IWICComponentInfo *compinfo;
-
     TRACE("(%p,%p)\n", iface, ppIDecoderInfo);
 
-    hr = CreateComponentInfo(&CLSID_WICIcoDecoder, &compinfo);
-    if (FAILED(hr)) return hr;
-
-    hr = IWICComponentInfo_QueryInterface(compinfo, &IID_IWICBitmapDecoderInfo,
-        (void**)ppIDecoderInfo);
-
-    IWICComponentInfo_Release(compinfo);
-
-    return hr;
+    return get_decoder_info(&CLSID_WICIcoDecoder, ppIDecoderInfo);
 }
 
 static HRESULT WINAPI IcoDecoder_CopyPalette(IWICBitmapDecoder *iface,

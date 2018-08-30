@@ -84,7 +84,6 @@ add_library(mbedtls SHARED
     ${CMAKE_CURRENT_BINARY_DIR}/mbedtls.def)
 
 set_module_type(mbedtls win32dll)
-target_link_libraries(mbedtls zlib)
 add_importlibs(mbedtls advapi32 msvcrt kernel32 ntdll)
 
 # to use `_vsnprintf_s` looks like we have to define MINGW_HAS_SECURE_API
@@ -95,7 +94,6 @@ add_cd_file(TARGET mbedtls DESTINATION reactos/system32 FOR all)
 
 if(NOT MSVC)
     add_target_compile_flags(mbedtls "-Wno-pointer-sign -Wno-unused-function")
-    if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
-        add_target_compile_flags(mbedtls "-Wno-unused-but-set-variable")
-    endif()
+elseif(USE_CLANG_CL)
+    add_target_compile_flags(mbedtls "-Wno-tautological-constant-compare")
 endif()

@@ -49,6 +49,10 @@ VOID
 #define HAL_APC_REQUEST         0
 #define HAL_DPC_REQUEST         1
 
+/* HAL profiling offsets in KeGetPcr()->HalReserved[] */
+#define HAL_PROFILING_INTERVAL      0
+#define HAL_PROFILING_MULTIPLIER    1
+
 /* CMOS Registers and Ports */
 #define CMOS_CONTROL_PORT       (PUCHAR)0x70
 #define CMOS_DATA_PORT          (PUCHAR)0x71
@@ -572,7 +576,7 @@ HalpEnableInterruptHandler(IN UCHAR Flags,
 VOID NTAPI HalpInitializePICs(IN BOOLEAN EnableInterrupts);
 VOID __cdecl HalpApcInterrupt(VOID);
 VOID __cdecl HalpDispatchInterrupt(VOID);
-VOID __cdecl HalpDispatchInterrupt2(VOID);
+PHAL_SW_INTERRUPT_HANDLER __cdecl HalpDispatchInterrupt2(VOID);
 DECLSPEC_NORETURN VOID FASTCALL HalpApcInterrupt2ndEntry(IN PKTRAP_FRAME TrapFrame);
 DECLSPEC_NORETURN VOID FASTCALL HalpDispatchInterrupt2ndEntry(IN PKTRAP_FRAME TrapFrame);
 
@@ -633,13 +637,29 @@ HalpReleasePciDeviceForDebugging(
 //
 // Memory routines
 //
-ULONG_PTR
+ULONG64
 NTAPI
 HalpAllocPhysicalMemory(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock,
-    IN ULONG_PTR MaxAddress,
+    IN ULONG64 MaxAddress,
     IN PFN_NUMBER PageCount,
     IN BOOLEAN Aligned
+);
+
+PVOID
+NTAPI
+HalpMapPhysicalMemory64Vista(
+    IN PHYSICAL_ADDRESS PhysicalAddress,
+    IN PFN_COUNT PageCount,
+    IN BOOLEAN FlushCurrentTLB
+);
+
+VOID
+NTAPI
+HalpUnmapVirtualAddressVista(
+    IN PVOID VirtualAddress,
+    IN PFN_COUNT NumberPages,
+    IN BOOLEAN FlushCurrentTLB
 );
 
 PVOID
@@ -738,6 +758,12 @@ HalpAcquireCmosSpinLock(
 VOID
 NTAPI
 HalpReleaseCmosSpinLock(
+    VOID
+);
+
+VOID
+NTAPI
+HalpInitializeLegacyPICs(
     VOID
 );
 

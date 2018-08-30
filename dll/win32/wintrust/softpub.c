@@ -16,8 +16,18 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
+#include <stdarg.h>
 
-#include "wintrust_priv.h"
+#define NONAMELESSUNION
+
+#include "windef.h"
+#include "winbase.h"
+#include "winternl.h"
+#include "wintrust.h"
+#include "mssip.h"
+#include "softpub.h"
+#include "winnls.h"
+#include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(wintrust);
 
@@ -339,7 +349,7 @@ static DWORD SOFTPUB_VerifyImageHash(CRYPT_PROVIDER_DATA *data, HANDLE file)
 
     if (!prov)
     {
-        if (!CryptAcquireContextW(&prov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
+        if (!CryptAcquireContextW(&prov, NULL, MS_ENH_RSA_AES_PROV_W, PROV_RSA_AES, CRYPT_VERIFYCONTEXT))
             return GetLastError();
         release_prov = TRUE;
     }

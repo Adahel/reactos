@@ -20,9 +20,30 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "precomp.h"
+#include "config.h"
+#include "wine/port.h"
 
-#include <winsvc.h>
+#include <stdarg.h>
+#include <string.h>
+
+#define COBJMACROS
+#define NONAMELESSUNION
+
+#include "windef.h"
+#include "winbase.h"
+#include "winuser.h"
+#include "winsvc.h"
+#include "objbase.h"
+#include "ole2.h"
+#include "rpc.h"
+#include "winerror.h"
+#include "winreg.h"
+#include "servprov.h"
+#include "wine/unicode.h"
+
+#include "compobj_private.h"
+
+#include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ole);
 
@@ -809,14 +830,16 @@ static HRESULT WINAPI ClientRpcChannelBuffer_SendReceive(LPRPCCHANNELBUFFER ifac
     ORPC_EXTENT_ARRAY orpc_ext_array;
     WIRE_ORPC_EXTENT *first_wire_orpc_extent = NULL;
     HRESULT hrFault = S_OK;
+    APARTMENT *apt = apartment_get_current_or_mta();
 
     TRACE("(%p) iMethod=%d\n", olemsg, olemsg->iMethod);
 
-    hr = ClientRpcChannelBuffer_IsCorrectApartment(This, COM_CurrentApt());
+    hr = ClientRpcChannelBuffer_IsCorrectApartment(This, apt);
     if (hr != S_OK)
     {
         ERR("called from wrong apartment, should have been 0x%s\n",
             wine_dbgstr_longlong(This->oxid));
+        if (apt) apartment_release(apt);
         return RPC_E_WRONG_THREAD;
     }
     /* This situation should be impossible in multi-threaded apartments,
@@ -824,11 +847,12 @@ static HRESULT WINAPI ClientRpcChannelBuffer_SendReceive(LPRPCCHANNELBUFFER ifac
      * Note: doing a COM call during the processing of a sent message is
      * only disallowed if a client call is already being waited for
      * completion */
-    if (!COM_CurrentApt()->multi_threaded &&
+    if (!apt->multi_threaded &&
         COM_CurrentInfo()->pending_call_count_client &&
         InSendMessage())
     {
         ERR("can't make an outgoing COM call in response to a sent message\n");
+        apartment_release(apt);
         return RPC_E_CANTCALLOUT_ININPUTSYNCCALL;
     }
 
@@ -946,6 +970,7 @@ static HRESULT WINAPI ClientRpcChannelBuffer_SendReceive(LPRPCCHANNELBUFFER ifac
 
     TRACE("-- 0x%08x\n", hr);
 
+    apartment_release(apt);
     return hr;
 }
 
@@ -1073,7 +1098,7 @@ static const IRpcChannelBufferVtbl ServerRpcChannelBufferVtbl =
 HRESULT RPC_CreateClientChannel(const OXID *oxid, const IPID *ipid,
                                 const OXID_INFO *oxid_info,
                                 DWORD dest_context, void *dest_context_data,
-                                IRpcChannelBuffer **chan)
+                                IRpcChannelBuffer **chan, APARTMENT *apt)
 {
     ClientRpcChannelBuffer *This;
     WCHAR                   endpoint[200];
@@ -1127,7 +1152,7 @@ HRESULT RPC_CreateClientChannel(const OXID *oxid, const IPID *ipid,
     This->super.dest_context = dest_context;
     This->super.dest_context_data = dest_context_data;
     This->bind = bind;
-    apartment_getoxid(COM_CurrentApt(), &This->oxid);
+    apartment_getoxid(apt, &This->oxid);
     This->server_pid = oxid_info->dwPid;
     This->event = NULL;
 
@@ -1474,16 +1499,17 @@ static void __RPC_STUB dispatch_rpc(RPC_MESSAGE *msg)
     else
     {
         BOOL joined = FALSE;
-        if (!COM_CurrentInfo()->apt)
+        struct oletls *info = COM_CurrentInfo();
+
+        if (!info->apt)
         {
-            apartment_joinmta();
+            enter_apartment(info, COINIT_MULTITHREADED);
             joined = TRUE;
         }
         RPC_ExecuteCall(params);
         if (joined)
         {
-            apartment_release(COM_CurrentInfo()->apt);
-            COM_CurrentInfo()->apt = NULL;
+            leave_apartment(info);
         }
     }
 
@@ -1622,7 +1648,7 @@ void RPC_StartRemoting(struct apartment *apt)
 
         /* FIXME: move remote unknown exporting into this function */
     }
-    start_apartment_remote_unknown();
+    start_apartment_remote_unknown(apt);
 }
 
 

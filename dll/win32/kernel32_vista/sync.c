@@ -2,7 +2,6 @@
 
 #define NDEBUG
 #include <debug.h>
-#include <rtlfuncs.h>
 
 VOID
 NTAPI
@@ -49,9 +48,6 @@ VOID
 NTAPI
 RtlReleaseSRWLockExclusive(IN OUT PRTL_SRWLOCK SRWLock);
 
-ULONG
-NTAPI
-RtlNtStatusToDosError(IN NTSTATUS Status);
 
 VOID
 WINAPI
@@ -94,7 +90,6 @@ ReleaseSRWLockShared(PSRWLOCK Lock)
 {
     RtlReleaseSRWLockShared((PRTL_SRWLOCK)Lock);
 }
-
 
 FORCEINLINE
 PLARGE_INTEGER
@@ -150,3 +145,31 @@ WakeConditionVariable(PCONDITION_VARIABLE ConditionVariable)
 {
     RtlWakeConditionVariable((PRTL_CONDITION_VARIABLE)ConditionVariable);
 }
+
+
+/*
+* @implemented
+*/
+BOOL WINAPI InitializeCriticalSectionEx(OUT LPCRITICAL_SECTION lpCriticalSection,
+                                        IN DWORD dwSpinCount,
+                                        IN DWORD flags)
+{
+    NTSTATUS Status;
+
+    /* FIXME: Flags ignored */
+
+    /* Initialize the critical section */
+    Status = RtlInitializeCriticalSectionAndSpinCount(
+        (PRTL_CRITICAL_SECTION)lpCriticalSection,
+        dwSpinCount);
+    if (!NT_SUCCESS(Status))
+    {
+        /* Set failure code */
+        SetLastError(RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+
+    /* Success */
+    return TRUE;
+}
+

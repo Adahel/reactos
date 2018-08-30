@@ -28,6 +28,10 @@
 #include <tdi.h>
 #include <afd/shared.h>
 #include <mswsock.h>
+
+#include <wine/debug.h>
+WINE_DEFAULT_DEBUG_CHANNEL(msafd);
+
 #include "include/helpers.h"
 
 extern HANDLE GlobalHeap;
@@ -136,15 +140,16 @@ typedef struct _AFDAPCCONTEXT
     PSOCKET_INFORMATION lpSocket;
 } AFDAPCCONTEXT, *PAFDAPCCONTEXT;
 
+_Must_inspect_result_
 SOCKET
 WSPAPI
 WSPAccept(
-    IN      SOCKET s,
-    OUT     LPSOCKADDR addr,
-    IN OUT  LPINT addrlen,
-    IN      LPCONDITIONPROC lpfnCondition,
-    IN      DWORD dwCallbackData,
-    OUT     LPINT lpErrno);
+    _In_ SOCKET s,
+    _Out_writes_bytes_to_opt_(*addrlen, *addrlen) struct sockaddr FAR * addr,
+    _Inout_opt_ LPINT addrlen,
+    _In_opt_ LPCONDITIONPROC lpfnCondition,
+    _In_opt_ DWORD_PTR dwCallbackData,
+    _Out_ LPINT lpErrno);
 
 INT
 WSPAPI
@@ -454,7 +459,9 @@ int CreateContext(
 	PSOCKET_INFORMATION Socket
 );
 
-int SockAsyncThread(
+ULONG
+NTAPI
+SockAsyncThread(
 	PVOID ThreadParam
 );
 

@@ -114,6 +114,7 @@ BEGIN
     IDS_CTRL_SHIFT "Ctrl+Shift"
     IDS_LEFT_ALT_SHIFT "Lewy Alt+Shift"
     IDS_SWITCH_BET_INLANG "Przełącza pomiędzy układami klawiatury"
+    IDS_REBOOT_NOW, "Uruchomić ponownie system?"
 END
 
 STRINGTABLE
@@ -210,7 +211,7 @@ BEGIN
     IDS_LITHUANIAN_LAYOUT "Litewski"
     IDS_LITHUANIAN_IBM_LAYOUT "Litewski (IBM)"
     IDS_FYRO_MACEDONIAN_LAYOUT "Macedoński(FYRO)"
-    IDS_MALAYALAM_LAYOUT "Malayalam"
+    IDS_MALAYALAM_LAYOUT "Malajalam"
     IDS_MARATHI_LAYOUT "Marathi"
     IDS_MONGOLIAN_CYRILLIC_LAYOUT "Mongolski (Cyrylica)"
     IDS_NORWEGIAN_LAYOUT "Norweski"

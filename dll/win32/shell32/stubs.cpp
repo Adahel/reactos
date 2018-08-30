@@ -69,20 +69,6 @@ PathIsEqualOrSubFolder(LPWSTR lpFolder, LPWSTR lpSubFolder)
     return FALSE;
 }
 
-/*
- * Unimplemented
- */
-EXTERN_C HRESULT
-WINAPI
-SHCreateFileExtractIconW(LPCWSTR pszPath,
-                         DWORD dwFileAttributes,
-                         REFIID riid,
-                         void **ppv)
-{
-    FIXME("SHCreateFileExtractIconW() stub\n");
-    return E_FAIL;
-}
-
 EXTERN_C HRESULT
 WINAPI
 SHGetUnreadMailCountW(HKEY hKeyUser,
@@ -654,17 +640,6 @@ SHChangeNotifySuspendResume(BOOL bSuspend,
                             DWORD dwReserved)
 {
     FIXME("SHChangeNotifySuspendResume() stub\n");
-    return FALSE;
-}
-
-/*
- * Unimplemented
- */
-EXTERN_C BOOL
-WINAPI
-RegenerateUserEnvironment(LPVOID *lpUnknown, BOOL bUnknown)
-{
-    FIXME("RegenerateUserEnvironment() stub\n");
     return FALSE;
 }
 

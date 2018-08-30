@@ -2,7 +2,8 @@
 add_definitions(
     -DWIN32
     -DNDEBUG
-    -DUSE_WIN32_FILEIO)
+    -DUSE_WIN32_FILEIO
+    -DTIF_PLATFORM_CONSOLE)
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libtiff
@@ -59,7 +60,5 @@ add_pch(libtiff precomp.h SOURCE)
 add_cd_file(TARGET libtiff DESTINATION reactos/system32 FOR all)
 
 if(NOT MSVC)
-    if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
-        add_target_compile_flags(libtiff "-Wno-unused-but-set-variable")
-    endif()
+    add_target_compile_flags(libtiff "-Wno-unused-but-set-variable")
 endif()

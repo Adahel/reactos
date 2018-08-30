@@ -18,7 +18,7 @@ typedef struct _FONT_ENTRY_MEM
 typedef struct _FONT_ENTRY_COLL_MEM
 {
     LIST_ENTRY ListEntry;
-    UINT Handle;
+    HANDLE Handle;
     FONT_ENTRY_MEM *Entry;
 } FONT_ENTRY_COLL_MEM, *PFONT_ENTRY_COLL_MEM;
 
@@ -29,6 +29,7 @@ typedef struct _FONT_CACHE_ENTRY
     FT_Face Face;
     FT_BitmapGlyph BitmapGlyph;
     int Height;
+    FT_Render_Mode RenderMode;
     MATRIX mxWorldToDevice;
 } FONT_CACHE_ENTRY, *PFONT_CACHE_ENTRY;
 

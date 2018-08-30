@@ -30,9 +30,28 @@
  * - Fallout : works great in X and DGA mode
  */
 
-#include "dinput_private.h"
+#include "config.h"
+#include <assert.h>
+#include <stdarg.h>
+#include <string.h>
 
-#include <rpcproxy.h>
+#define COBJMACROS
+#define NONAMELESSUNION
+
+#include "wine/debug.h"
+#include "wine/unicode.h"
+#include "windef.h"
+#include "winbase.h"
+#include "winuser.h"
+#include "winerror.h"
+#include "objbase.h"
+#include "rpcproxy.h"
+#include "initguid.h"
+#include "dinput_private.h"
+#include "device_private.h"
+#include "dinputd.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(dinput);
 
 static const IDirectInput7AVtbl ddi7avt;
 static const IDirectInput7WVtbl ddi7wvt;
@@ -1754,7 +1773,7 @@ static BOOL check_hook_thread(void)
     return hook_thread_id != 0;
 }
 
-void check_dinput_hooks(LPDIRECTINPUTDEVICE8W iface)
+void check_dinput_hooks(LPDIRECTINPUTDEVICE8W iface, BOOL acquired)
 {
     static HHOOK callwndproc_hook;
     static ULONG foreground_cnt;
@@ -1764,7 +1783,7 @@ void check_dinput_hooks(LPDIRECTINPUTDEVICE8W iface)
 
     if (dev->dwCoopLevel & DISCL_FOREGROUND)
     {
-        if (dev->acquired)
+        if (acquired)
             foreground_cnt++;
         else
             foreground_cnt--;

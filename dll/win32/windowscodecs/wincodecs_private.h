@@ -19,33 +19,9 @@
 #ifndef WINCODECS_PRIVATE_H
 #define WINCODECS_PRIVATE_H
 
-#include <wine/config.h>
-#include <wine/port.h>
-
-#include <stdarg.h>
-
-#define WIN32_NO_STATUS
-#define _INC_WINDOWS
-#define COM_NO_WINDOWS_H
-
-#define COBJMACROS
-#define NONAMELESSUNION
-#define NONAMELESSSTRUCT
-
-#include <windef.h>
-#include <winbase.h>
-#include <wingdi.h>
-#include <winreg.h>
-#include <objbase.h>
-#include <oleauto.h>
-#include <wincodec.h>
-#include <wincodecsdk.h>
-
-#include <wine/debug.h>
-#include <wine/library.h>
-#include <wine/unicode.h>
-
-WINE_DEFAULT_DEBUG_CHANNEL(wincodecs);
+#include "wincodec.h"
+#include "wincodecsdk.h"
+#include "wine/unicode.h"
 
 DEFINE_GUID(CLSID_WineTgaDecoder, 0xb11fc79a,0x67cc,0x43e6,0xa9,0xce,0xe3,0xd5,0x49,0x45,0xd3,0x04);
 
@@ -179,7 +155,7 @@ extern HRESULT IcnsEncoder_CreateInstance(REFIID iid, void** ppv) DECLSPEC_HIDDE
 extern HRESULT TgaDecoder_CreateInstance(REFIID iid, void** ppv) DECLSPEC_HIDDEN;
 
 extern HRESULT BitmapImpl_Create(UINT uiWidth, UINT uiHeight,
-    UINT stride, UINT datasize, BYTE *bits,
+    UINT stride, UINT datasize, void *view, UINT offset,
     REFWICPixelFormatGUID pixelFormat, WICBitmapCreateCacheOption option,
     IWICBitmap **ppIBitmap) DECLSPEC_HIDDEN;
 extern HRESULT BitmapScaler_Create(IWICBitmapScaler **scaler) DECLSPEC_HIDDEN;
@@ -208,11 +184,13 @@ extern void reverse_bgr8(UINT bytesperpixel, LPBYTE bits, UINT width, UINT heigh
 
 extern HRESULT get_pixelformat_bpp(const GUID *pixelformat, UINT *bpp) DECLSPEC_HIDDEN;
 
-extern HRESULT CreatePropertyBag2(PROPBAG2 *options, UINT count,
+extern HRESULT CreatePropertyBag2(const PROPBAG2 *options, UINT count,
                                   IPropertyBag2 **property) DECLSPEC_HIDDEN;
 
 extern HRESULT CreateComponentInfo(REFCLSID clsid, IWICComponentInfo **ppIInfo) DECLSPEC_HIDDEN;
+extern void ReleaseComponentInfos(void) DECLSPEC_HIDDEN;
 extern HRESULT CreateComponentEnumerator(DWORD componentTypes, DWORD options, IEnumUnknown **ppIEnumUnknown) DECLSPEC_HIDDEN;
+extern HRESULT get_decoder_info(REFCLSID clsid, IWICBitmapDecoderInfo **info) DECLSPEC_HIDDEN;
 
 typedef struct BmpDecoder BmpDecoder;
 
@@ -251,9 +229,17 @@ extern HRESULT IMDReader_CreateInstance(REFIID iid, void **ppv) DECLSPEC_HIDDEN;
 extern HRESULT GCEReader_CreateInstance(REFIID iid, void **ppv) DECLSPEC_HIDDEN;
 extern HRESULT APEReader_CreateInstance(REFIID iid, void **ppv) DECLSPEC_HIDDEN;
 extern HRESULT GifCommentReader_CreateInstance(REFIID iid, void **ppv) DECLSPEC_HIDDEN;
-
-extern HRESULT MetadataQueryReader_CreateInstance(IWICMetadataBlockReader *mbr, IWICMetadataQueryReader **out) DECLSPEC_HIDDEN;
-
+extern HRESULT MetadataQueryReader_CreateInstance(IWICMetadataBlockReader *, const WCHAR *, IWICMetadataQueryReader **) DECLSPEC_HIDDEN;
 extern HRESULT stream_initialize_from_filehandle(IWICStream *iface, HANDLE hfile) DECLSPEC_HIDDEN;
+
+static inline WCHAR *heap_strdupW(const WCHAR *src)
+{
+    WCHAR *dst;
+    SIZE_T len;
+    if (!src) return NULL;
+    len = (strlenW(src) + 1) * sizeof(WCHAR);
+    if ((dst = HeapAlloc(GetProcessHeap(), 0, len))) memcpy(dst, src, len);
+    return dst;
+}
 
 #endif /* WINCODECS_PRIVATE_H */

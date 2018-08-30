@@ -18,7 +18,17 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "precomp.h"
+#define COBJMACROS
+#define NONAMELESSUNION
+#define NONAMELESSSTRUCT
+
+#include "wine/debug.h"
+#include "wine/unicode.h"
+#include "winbase.h"
+#include "winuser.h"
+#include "winnt.h"
+#include "variant.h"
+#include "resource.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(variant);
 
@@ -3794,7 +3804,7 @@ HRESULT WINAPI VarCyAdd(const CY cyLeft, const CY cyRight, CY* pCyOut)
  *  Success: S_OK.
  *  Failure: DISP_E_OVERFLOW, if the value will not fit in the destination
  */
-HRESULT WINAPI VarCyMul(const CY cyLeft, const CY cyRight, CY* pCyOut)
+HRESULT WINAPI VarCyMul(const CY cyLeft, CY cyRight, CY* pCyOut)
 {
   double l,r;
   _VarR8FromCy(cyLeft, &l);
@@ -5362,7 +5372,7 @@ static HRESULT VARIANT_DI_normalize(VARIANT_DI * val, int exponent2, BOOL isDoub
        end of the bit representation, down to the precision guaranteed by the
        floating point number. */
     if (isDouble) {
-        while (exponent10 < 0 && (val->bitsnum[2] != 0 || (val->bitsnum[2] == 0 && (val->bitsnum[1] & 0xFFE00000) != 0))) {
+        while (exponent10 < 0 && (val->bitsnum[2] != 0 || (val->bitsnum[1] & 0xFFE00000) != 0)) {
             int rem10;
 
             rem10 = VARIANT_int_divbychar(val->bitsnum, 3, 10);
@@ -6051,7 +6061,7 @@ HRESULT WINAPI VarBoolFromCy(CY cyIn, VARIANT_BOOL *pBoolOut)
  * Get a localized string from the resources
  *
  */
-BOOL VARIANT_GetLocalisedText(LANGID langId, DWORD dwId, WCHAR *lpszDest)
+static BOOL VARIANT_GetLocalisedText(LANGID langId, DWORD dwId, WCHAR *lpszDest)
 {
   HRSRC hrsrc;
 

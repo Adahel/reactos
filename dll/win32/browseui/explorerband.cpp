@@ -54,12 +54,6 @@ static BOOL _ILIsSpecialFolder (LPCITEMIDLIST pidl)
         PT_YAGUID == lpPData->type)) || (pidl && pidl->mkid.cb == 0x00)));
 }
 
-static BOOL _ILIsDesktop (LPCITEMIDLIST pidl)
-{
-    return (pidl && pidl->mkid.cb == 0x00);
-}
-
-
 HRESULT GetDisplayName(LPCITEMIDLIST pidlDirectory,TCHAR *szDisplayName,UINT cchMax,DWORD uFlags)
 {
     IShellFolder *pShellFolder = NULL;
@@ -574,11 +568,14 @@ HTREEITEM CExplorerBand::InsertItem(HTREEITEM hParent, IShellFolder *psfParent, 
 
     /* Get the name of the node */
     WCHAR wszDisplayName[MAX_PATH];
-    if (!ILGetDisplayNameEx(psfParent, pElt, wszDisplayName, ILGDN_INFOLDER))
-    {
-        ERR("Failed to get node name\n");
+    STRRET strret;
+    hr = psfParent->GetDisplayNameOf(pEltRelative, SHGDN_INFOLDER, &strret);
+    if (FAILED_UNEXPECTEDLY(hr))
         return NULL;
-    }
+
+    hr = StrRetToBufW(&strret, pEltRelative, wszDisplayName, MAX_PATH);
+    if (FAILED_UNEXPECTEDLY(hr))
+        return NULL;
 
     /* Get the icon of the node */
     INT iIcon = SHMapPIDLToSystemImageListIndex(psfParent, pEltRelative, NULL);
@@ -1268,13 +1265,17 @@ HRESULT STDMETHODCALLTYPE CExplorerBand::GetSizeMax(ULARGE_INTEGER *pcbSize)
 HRESULT STDMETHODCALLTYPE CExplorerBand::OnWinEvent(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *theResult)
 {
     BOOL bHandled;
+    LRESULT result;
+
     if (uMsg == WM_NOTIFY)
     {
         NMHDR *pNotifyHeader = (NMHDR*)lParam;
         switch (pNotifyHeader->code)
         {
             case TVN_ITEMEXPANDING:
-                *theResult = OnTreeItemExpanding((LPNMTREEVIEW)lParam);
+                result = OnTreeItemExpanding((LPNMTREEVIEW)lParam);
+                if (theResult)
+                    *theResult = result;
                 break;
             case TVN_SELCHANGED:
                 OnSelectionChanged((LPNMTREEVIEW)lParam);
@@ -1284,7 +1285,8 @@ HRESULT STDMETHODCALLTYPE CExplorerBand::OnWinEvent(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case NM_RCLICK:
                 OnContextMenu(WM_CONTEXTMENU, (WPARAM)m_hWnd, GetMessagePos(), bHandled);
-                *theResult = 1;
+                if (theResult)
+                    *theResult = 1;
                 break;
             case TVN_BEGINDRAG:
             case TVN_BEGINRDRAG:
@@ -1298,7 +1300,8 @@ HRESULT STDMETHODCALLTYPE CExplorerBand::OnWinEvent(HWND hWnd, UINT uMsg, WPARAM
                 LPCITEMIDLIST pChild;
                 HRESULT hr;
 
-                *theResult = 1;
+                if (theResult)
+                    *theResult = 1;
                 NodeInfo *info = GetNodeInfo(dispInfo->item.hItem);
                 if (!info)
                     return E_FAIL;
@@ -1307,7 +1310,7 @@ HRESULT STDMETHODCALLTYPE CExplorerBand::OnWinEvent(HWND hWnd, UINT uMsg, WPARAM
                     return E_FAIL;
 
                 hr = pParent->GetAttributesOf(1, &pChild, &dwAttr);
-                if (SUCCEEDED(hr) && (dwAttr & SFGAO_CANRENAME))
+                if (SUCCEEDED(hr) && (dwAttr & SFGAO_CANRENAME) && theResult)
                     *theResult = 0;
                 return S_OK;
             }
@@ -1317,7 +1320,8 @@ HRESULT STDMETHODCALLTYPE CExplorerBand::OnWinEvent(HWND hWnd, UINT uMsg, WPARAM
                 NodeInfo *info = GetNodeInfo(dispInfo->item.hItem);
                 HRESULT hr;
 
-                *theResult = 0;
+                if (theResult)
+                    *theResult = 0;
                 if (dispInfo->item.pszText)
                 {
                     LPITEMIDLIST pidlNew;
@@ -1348,7 +1352,8 @@ HRESULT STDMETHODCALLTYPE CExplorerBand::OnWinEvent(HWND hWnd, UINT uMsg, WPARAM
 
                         ILFree(pidlNewAbs);
                         ILFree(pidlNew);
-                        *theResult = 1;
+                        if (theResult)
+                            *theResult = 1;
                     }
                     return S_OK;
                 }

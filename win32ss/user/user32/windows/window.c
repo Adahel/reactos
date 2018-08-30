@@ -3,16 +3,15 @@
  * PROJECT:         ReactOS user32.dll
  * FILE:            win32ss/user/user32/windows/window.c
  * PURPOSE:         Window management
- * PROGRAMMER:      Casper S. Hornstrup (chorns@users.sourceforge.net)
+ * PROGRAMMERS:     Casper S. Hornstrup (chorns@users.sourceforge.net)
+ *                  Katayama Hirofumi MZ (katayama.hirofumi.mz@gmail.com)
  * UPDATE HISTORY:
  *      06-06-2001  CSH  Created
  */
 
-/* INCLUDES ******************************************************************/
 #define DEBUG
 #include <user32.h>
 
-#include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(user32);
 
 void MDI_CalcDefaultChildPos( HWND hwndClient, INT total, LPPOINT lpPos, INT delta, UINT *id );
@@ -80,9 +79,22 @@ BringWindowToTop(HWND hWnd)
 
 
 VOID WINAPI
-SwitchToThisWindow(HWND hwnd, BOOL fUnknown)
+SwitchToThisWindow(HWND hwnd, BOOL fAltTab)
 {
-    ShowWindow(hwnd, SW_SHOW);
+    HWND hwndFG;
+    if (fAltTab)
+    {
+        if (IsIconic(hwnd))
+            ShowWindowAsync(hwnd, SW_RESTORE);
+        SetForegroundWindow(hwnd);
+    }
+    else
+    {
+        hwndFG = GetForegroundWindow();
+        ShowWindow(hwnd, SW_RESTORE | SW_SHOWNA);
+        SetWindowPos(hwnd, hwndFG, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        SetWindowPos(hwndFG, hwnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    }
 }
 
 
@@ -1308,20 +1320,22 @@ GetWindowTextA(HWND hWnd, LPSTR lpString, int nMaxCount)
 
     lpString[0] = '\0';
 
-    if (!TestWindowProcess( Wnd))
+    if (!TestWindowProcess(Wnd))
     {
-       _SEH2_TRY
-       {
-           Length = DefWindowProcA(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
-       }
-       _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-       {
-           Length = 0;
-       }
-       _SEH2_END;
+        _SEH2_TRY
+        {
+            Length = DefWindowProcA(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Length = 0;
+        }
+        _SEH2_END;
     }
     else
-       Length = SendMessageA(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
+    {
+        Length = SendMessageA(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
+    }
     //ERR("GWTA Len %d : %s\n",Length,lpString);
     return Length;
 }
@@ -1332,7 +1346,20 @@ GetWindowTextA(HWND hWnd, LPSTR lpString, int nMaxCount)
 int WINAPI
 GetWindowTextLengthA(HWND hWnd)
 {
-    return(SendMessageA(hWnd, WM_GETTEXTLENGTH, 0, 0));
+    PWND Wnd;
+
+    Wnd = ValidateHwnd(hWnd);
+    if (!Wnd)
+        return 0;
+
+    if (!TestWindowProcess(Wnd))
+    {
+        return DefWindowProcA(hWnd, WM_GETTEXTLENGTH, 0, 0);
+    }
+    else
+    {
+        return SendMessageA(hWnd, WM_GETTEXTLENGTH, 0, 0);
+    }
 }
 
 /*
@@ -1341,7 +1368,20 @@ GetWindowTextLengthA(HWND hWnd)
 int WINAPI
 GetWindowTextLengthW(HWND hWnd)
 {
-    return(SendMessageW(hWnd, WM_GETTEXTLENGTH, 0, 0));
+    PWND Wnd;
+
+    Wnd = ValidateHwnd(hWnd);
+    if (!Wnd)
+        return 0;
+
+    if (!TestWindowProcess(Wnd))
+    {
+        return DefWindowProcW(hWnd, WM_GETTEXTLENGTH, 0, 0);
+    }
+    else
+    {
+        return SendMessageW(hWnd, WM_GETTEXTLENGTH, 0, 0);
+    }
 }
 
 /*
@@ -1362,20 +1402,22 @@ GetWindowTextW(HWND hWnd, LPWSTR lpString, int nMaxCount)
 
     lpString[0] = L'\0';
 
-    if (!TestWindowProcess( Wnd))
+    if (!TestWindowProcess(Wnd))
     {
-       _SEH2_TRY
-       {
-           Length = DefWindowProcW(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
-       }
-       _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-       {
-           Length = 0;
-       }
-       _SEH2_END;
+        _SEH2_TRY
+        {
+            Length = DefWindowProcW(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Length = 0;
+        }
+        _SEH2_END;
     }
     else
-       Length = SendMessageW(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
+    {
+        Length = SendMessageW(hWnd, WM_GETTEXT, nMaxCount, (LPARAM)lpString);
+    }
     //ERR("GWTW Len %d : %S\n",Length,lpString);
     return Length;
 }
@@ -1801,7 +1843,7 @@ int WINAPI
 InternalGetWindowText(HWND hWnd, LPWSTR lpString, int nMaxCount)
 {
     INT Ret = NtUserInternalGetWindowText(hWnd, lpString, nMaxCount);
-    if (Ret == 0)
+    if (Ret == 0 && lpString)
         *lpString = L'\0';
     return Ret;
 }

@@ -23,6 +23,7 @@
 #include <shellapi.h>
 #include <htiframe.h>
 #include <strsafe.h>
+#include <undocshell.h>
 
 extern HRESULT IUnknown_ShowDW(IUnknown * punk, BOOL fShow);
 
@@ -167,7 +168,7 @@ HRESULT WINAPI SHBindToFolder(LPCITEMIDLIST path, IShellFolder **newFolder)
 }
 
 static const TCHAR szCabinetWndClass[] = TEXT("CabinetWClass");
-static const TCHAR szExploreWndClass[] = TEXT("ExploreWClass");
+//static const TCHAR szExploreWndClass[] = TEXT("ExploreWClass");
 
 class CDockManager;
 class CShellBrowser;
@@ -273,6 +274,12 @@ private:
     class barInfo
     {
     public:
+        barInfo()
+        {
+            memset(&borderSpace, 0, sizeof(borderSpace));
+            hwnd = NULL;
+        }
+
         RECT                                borderSpace;
         CComPtr<IUnknown>                   clientBar;
         HWND                                hwnd;
@@ -593,7 +600,7 @@ public:
     LRESULT OnInitMenuPopup(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnSetFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT RelayMsgToShellView(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
-    LRESULT PropagateMessage(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
+    LRESULT OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnClose(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled);
     LRESULT OnFolderOptions(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled);
     LRESULT OnMapNetworkDrive(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled);
@@ -639,7 +646,7 @@ public:
         MESSAGE_HANDLER(WM_MEASUREITEM, RelayMsgToShellView)
         MESSAGE_HANDLER(WM_DRAWITEM, RelayMsgToShellView)
         MESSAGE_HANDLER(WM_MENUSELECT, RelayMsgToShellView)
-        MESSAGE_HANDLER(WM_WININICHANGE, PropagateMessage)
+        MESSAGE_HANDLER(WM_SETTINGCHANGE, OnSettingChange)
         COMMAND_ID_HANDLER(IDM_FILE_CLOSE, OnClose)
         COMMAND_ID_HANDLER(IDM_TOOLS_FOLDEROPTIONS, OnFolderOptions)
         COMMAND_ID_HANDLER(IDM_TOOLS_MAPNETWORKDRIVE, OnMapNetworkDrive)
@@ -703,7 +710,6 @@ CShellBrowser::CShellBrowser()
     fCurrentDirectoryPIDL = NULL;
     fStatusBar = NULL;
     fStatusBarVisible = true;
-    memset(fClientBars, 0, sizeof(fClientBars));
     fCurrentMenuBar = NULL;
     fHistoryObject = NULL;
     fHistoryStream = NULL;
@@ -816,11 +822,6 @@ HRESULT CShellBrowser::BrowseToPIDL(LPCITEMIDLIST pidl, long flags)
     if (FAILED_UNEXPECTEDLY(hResult))
         return hResult;
     return S_OK;
-}
-
-BOOL WINAPI _ILIsDesktop(LPCITEMIDLIST pidl)
-{
-    return (pidl == NULL || pidl->mkid.cb == 0);
 }
 
 BOOL WINAPI _ILIsPidlSimple(LPCITEMIDLIST pidl)
@@ -1379,18 +1380,22 @@ LRESULT CALLBACK CShellBrowser::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, 
     previousMessage = pThis->m_pCurrentMsg;
     pThis->m_pCurrentMsg = &msg;
 
-    CComPtr<IMenuBand> menuBand;
-    hResult = pThis->GetMenuBand(IID_PPV_ARG(IMenuBand, &menuBand));
-    if (SUCCEEDED(hResult) && menuBand.p != NULL)
+    /* If the shell browser is initialized, let the menu band preprocess the messages */
+    if (pThis->fCurrentDirectoryPIDL)
     {
-        hResult = menuBand->TranslateMenuMessage(&msg, &lResult);
-        if (hResult == S_OK)
-            return lResult;
-        uMsg = msg.message;
-        wParam = msg.wParam;
-        lParam = msg.lParam;
+        CComPtr<IMenuBand> menuBand;
+        hResult = pThis->GetMenuBand(IID_PPV_ARG(IMenuBand, &menuBand));
+        if (SUCCEEDED(hResult) && menuBand.p != NULL)
+        {
+            hResult = menuBand->TranslateMenuMessage(&msg, &lResult);
+            if (hResult == S_OK)
+                return lResult;
+            uMsg = msg.message;
+            wParam = msg.wParam;
+            lParam = msg.lParam;
+        }
+        menuBand.Release();
     }
-    menuBand.Release();
 
     handled = pThis->ProcessWindowMessage(hWnd, uMsg, wParam, lParam, lResult, 0);
     ATLASSERT(pThis->m_pCurrentMsg == &msg);
@@ -1398,10 +1403,10 @@ LRESULT CALLBACK CShellBrowser::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, 
     {
         if (uMsg == WM_NCDESTROY)
         {
-            saveWindowProc = reinterpret_cast<WNDPROC>(::GetWindowLongPtr(hWnd, GWL_WNDPROC));
+            saveWindowProc = reinterpret_cast<WNDPROC>(::GetWindowLongPtr(hWnd, GWLP_WNDPROC));
             lResult = pThis->DefWindowProc(uMsg, wParam, lParam);
-            if (saveWindowProc == reinterpret_cast<WNDPROC>(::GetWindowLongPtr(hWnd, GWL_WNDPROC)))
-                ::SetWindowLongPtr(hWnd, GWL_WNDPROC, (LONG_PTR)pThis->m_pfnSuperWindowProc);
+            if (saveWindowProc == reinterpret_cast<WNDPROC>(::GetWindowLongPtr(hWnd, GWLP_WNDPROC)))
+                ::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)pThis->m_pfnSuperWindowProc);
             pThis->m_dwState |= WINSTATE_DESTROYED;
         }
         else
@@ -3483,8 +3488,6 @@ LRESULT CShellBrowser::OnInitMenuPopup(UINT uMsg, WPARAM wParam, LPARAM lParam, 
         SHEnableMenuItem(theMenu, IDM_TOOLS_MAPNETWORKDRIVE, FALSE);
         SHEnableMenuItem(theMenu, IDM_TOOLS_DISCONNECTNETWORKDRIVE, FALSE);
         SHEnableMenuItem(theMenu, IDM_TOOLS_SYNCHRONIZE, FALSE);
-        FIXME("Folder options dialog is stubbed: CORE-11141\n");
-        SHEnableMenuItem(theMenu, IDM_TOOLS_FOLDEROPTIONS, FALSE);  // Remove when CORE-11141 is fixed.
         menuIndex = 4;
     }
     else if (theMenu == SHGetMenuFromID(fCurrentMenuBar, FCIDM_MENU_HELP))
@@ -3510,8 +3513,11 @@ LRESULT CShellBrowser::RelayMsgToShellView(UINT uMsg, WPARAM wParam, LPARAM lPar
     return 0;
 }
 
-LRESULT CShellBrowser::PropagateMessage(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+LRESULT CShellBrowser::OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
 {
+    LPVOID lpEnvironment;
+    RegenerateUserEnvironment(&lpEnvironment, TRUE);
+
     SHPropagateMessage(m_hWnd, uMsg, wParam, lParam, TRUE);
     return 0;
 }

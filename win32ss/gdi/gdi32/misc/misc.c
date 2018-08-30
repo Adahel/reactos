@@ -677,6 +677,19 @@ GdiDrawStream(HDC dc, ULONG l, PGDI_DRAW_STREAM pDS)
         else
             sizingtype = ST_STRETCH;
 
+        if (pDS->rcDest.right < pDS->rcDest.left || pDS->rcDest.bottom < pDS->rcDest.top)
+            return 0;
+
+        if (sm.cxLeftWidth + sm.cxRightWidth > pDS->rcDest.right - pDS->rcDest.left)
+        {
+            sm.cxLeftWidth = sm.cxRightWidth = 0;
+        }
+
+        if (sm.cyTopHeight + sm.cyBottomHeight > pDS->rcDest.bottom - pDS->rcDest.top)
+        {
+            sm.cyTopHeight = sm.cyBottomHeight = 0;
+        }
+
         UXTHEME_DrawImageBackground(pDS->hDC, 
                                     pDS->hImage, 
                                     &pDS->rcSrc, 
@@ -743,24 +756,6 @@ WINAPI
 GdiQueryTable(VOID)
 {
     return (PVOID)GdiHandleTable;
-}
-
-BOOL GdiIsHandleValid(HGDIOBJ hGdiObj)
-{
-    PGDI_TABLE_ENTRY Entry = GdiHandleTable + GDI_HANDLE_GET_INDEX(hGdiObj);
-// We are only looking for TYPE not the rest here, and why is FullUnique filled up with CRAP!?
-// DPRINT1("FullUnique -> %x\n", Entry->FullUnique);
-    if((Entry->Type & GDI_ENTRY_BASETYPE_MASK) != 0 &&
-            ( (Entry->Type << GDI_ENTRY_UPPER_SHIFT) & GDI_HANDLE_TYPE_MASK ) ==
-            GDI_HANDLE_GET_TYPE(hGdiObj))
-    {
-        HANDLE pid = (HANDLE)((ULONG_PTR)Entry->ProcessId & ~0x1);
-        if(pid == NULL || pid == CurrentProcessId)
-        {
-            return TRUE;
-        }
-    }
-    return FALSE;
 }
 
 BOOL GdiGetHandleUserData(HGDIOBJ hGdiObj, DWORD ObjectType, PVOID *UserData)

@@ -137,7 +137,7 @@ ObpDeallocateObject(IN PVOID Object)
     }
 
     /* Catch invalid access */
-    Header->Type = (POBJECT_TYPE)0xBAADB0B0;
+    Header->Type = (POBJECT_TYPE)(ULONG_PTR)0xBAADB0B0BAADB0B0ULL;
 
     /* Free the object using the same allocation tag */
     ExFreePoolWithTag(HeaderLocation, ObjectType->Key);
@@ -1215,14 +1215,14 @@ ObCreateObjectType(IN PUNICODE_STRING TypeName,
     else if ((TypeName->Length == 8) && !(wcscmp(TypeName->Buffer, L"File")))
     {
         /* Wait on the File Object's event directly */
-        LocalObjectType->DefaultObject = (PVOID)FIELD_OFFSET(FILE_OBJECT,
-                                                             Event);
+        LocalObjectType->DefaultObject = UlongToPtr(FIELD_OFFSET(FILE_OBJECT,
+                                                                 Event));
     }
     else if ((TypeName->Length == 24) && !(wcscmp(TypeName->Buffer, L"WaitablePort")))
     {
         /* Wait on the LPC Port's object directly */
-        LocalObjectType->DefaultObject = (PVOID)FIELD_OFFSET(LPCP_PORT_OBJECT,
-                                                             WaitEvent);
+        LocalObjectType->DefaultObject = UlongToPtr(FIELD_OFFSET(LPCP_PORT_OBJECT,
+                                                                 WaitEvent));
     }
     else
     {
@@ -1563,7 +1563,7 @@ NtQueryObject(IN HANDLE ObjectHandle,
                 BasicInfo->SecurityDescriptorSize = 0; /* FIXME*/
 
                 /* Check if this is a symlink */
-                if (ObjectHeader->Type == ObSymbolicLinkType)
+                if (ObjectHeader->Type == ObpSymbolicLinkObjectType)
                 {
                     /* Return the creation time */
                     BasicInfo->CreationTime.QuadPart =
@@ -1798,7 +1798,7 @@ NtSetInformationObject(IN HANDLE ObjectHandle,
                 /* Get the object directory */
                 Status = ObReferenceObjectByHandle(ObjectHandle,
                                                    0,
-                                                   ObDirectoryType,
+                                                   ObpDirectoryObjectType,
                                                    PreviousMode,
                                                    (PVOID*)&Directory,
                                                    NULL);

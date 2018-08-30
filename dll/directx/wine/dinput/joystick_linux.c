@@ -25,17 +25,24 @@
  *	force feedback
  */
 
-#include "dinput_private.h"
+#include "config.h"
+#include "wine/port.h"
 
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
 #endif
 #ifdef HAVE_SYS_TIME_H
 # include <sys/time.h>
 #endif
+#include <fcntl.h>
 #ifdef HAVE_SYS_IOCTL_H
 # include <sys/ioctl.h>
 #endif
+#include <errno.h>
 #ifdef HAVE_LINUX_IOCTL_H
 # include <linux/ioctl.h>
 #endif
@@ -47,7 +54,20 @@
 # include <sys/poll.h>
 #endif
 
+#include "wine/debug.h"
+#include "wine/unicode.h"
+#include "windef.h"
+#include "winbase.h"
+#include "winerror.h"
+#include "dinput.h"
+
+#include "dinput_private.h"
+#include "device_private.h"
+#include "joystick_private.h"
+
 #ifdef HAVE_LINUX_22_JOYSTICK_API
+
+WINE_DEFAULT_DEBUG_CHANNEL(dinput);
 
 #define JOYDEV_NEW "/dev/input/js"
 #define JOYDEV_OLD "/dev/js"
@@ -233,10 +253,14 @@ static INT find_joystick_devices(void)
                 /* If no axes were configured but there are axes assume a 1-to-1 (wii controller) */
                 if (joydev.axis_count && !found_axes)
                 {
+                    int axes_limit = min(joydev.axis_count, 8); /* generic driver limit */
+
                     ERR("Incoherent joystick data, advertised %d axes, detected 0. Assuming 1-to-1.\n",
-                         joydev.axis_count);
-                    for (j = 0; j < joydev.axis_count; j++)
+                        joydev.axis_count);
+                    for (j = 0; j < axes_limit; j++)
                         joydev.dev_axes_map[j] = j;
+
+                    joydev.axis_count = axes_limit;
                 }
             }
 

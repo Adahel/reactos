@@ -929,7 +929,7 @@ ApplyChanges(HWND hwndDlg)
     }
     RegCloseKey(hKey);
 
-    SetWindowLong(hwndDlg, DWL_MSGRESULT, (LONG)PSNRET_NOERROR);
+    SetWindowLongPtr(hwndDlg, DWLP_MSGRESULT, (LONG_PTR)PSNRET_NOERROR);
     return TRUE;
 }
 
@@ -996,7 +996,7 @@ SoundsDlgProc(HWND hwndDlg,
                     ofn.lpstrInitialDir = NULL;
                     ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
 
-                    if (GetOpenFileNameW(&ofn) == TRUE)
+                    if (GetOpenFileNameW(&ofn) != FALSE)
                     {
                         // FIXME search if list already contains that sound
 

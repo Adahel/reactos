@@ -1,8 +1,8 @@
 /*
  * PROJECT:     ReactOS Local Spooler
- * LICENSE:     GNU LGPL v2.1 or any later version as published by the Free Software Foundation
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
  * PURPOSE:     Precompiled Header for all source files
- * COPYRIGHT:   Copyright 2015-2017 Colin Finck <colin@reactos.org>
+ * COPYRIGHT:   Copyright 2015-2017 Colin Finck (colin@reactos.org)
  */
 
 #ifndef _PRECOMP_H
@@ -246,7 +246,7 @@ extern SKIPLIST GlobalJobList;
 DWORD WINAPI CreateJob(PLOCAL_PRINTER_HANDLE pPrinterHandle);
 void FreeJob(PLOCAL_JOB pJob);
 DWORD GetJobFilePath(PCWSTR pwszExtension, DWORD dwJobID, PWSTR pwszOutput);
-BOOL InitializeGlobalJobList();
+BOOL InitializeGlobalJobList(VOID);
 void InitializePrinterJobList(PLOCAL_PRINTER pPrinter);
 BOOL WINAPI LocalAddJob(HANDLE hPrinter, DWORD Level, LPBYTE pData, DWORD cbBuf, LPDWORD pcbNeeded);
 BOOL WINAPI LocalEnumJobs(HANDLE hPrinter, DWORD FirstJob, DWORD NoJobs, DWORD Level, PBYTE pStart, DWORD cbBuf, LPDWORD pcbNeeded, LPDWORD pcReturned);

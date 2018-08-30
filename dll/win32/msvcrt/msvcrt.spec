@@ -587,7 +587,7 @@
 @ cdecl _putw(long ptr)
 @ cdecl _putwch(long)
 @ cdecl _putws(wstr)
-# extern _pwctype
+@ extern _pwctype
 @ cdecl _read(long ptr long)
 @ cdecl _resetstkoflw()
 @ cdecl _rmdir(str)
@@ -601,8 +601,8 @@
 @ cdecl -arch=i386 _safe_fprem()
 @ cdecl -arch=i386 _safe_fprem1()
 @ cdecl _scalb(double long)
-# stub _scprintf
-# stub _scwprintf
+@ varargs _scprintf(str)
+@ varargs _scwprintf(wstr)
 @ cdecl _searchenv(str str ptr)
 @ stdcall -i386 _seh_longjmp_unwind(ptr)
 # stub _set_SSE2_enable
@@ -907,7 +907,7 @@
 @ cdecl rewind(ptr)
 @ varargs scanf(str)
 @ cdecl setbuf(ptr ptr)
-#@ cdecl -arch=x86_64,arm -norelay setjmp(ptr ptr) _setjmp
+@ cdecl -arch=x86_64,arm -norelay setjmp(ptr ptr) _setjmp
 @ cdecl setlocale(long str)
 @ cdecl setvbuf(ptr str long long)
 @ cdecl signal(long long)
@@ -987,44 +987,3 @@
 @ cdecl wctomb(ptr long)
 @ varargs wprintf(wstr)
 @ varargs wscanf(wstr)
-
-@ stub _except_handler4_common
-@ stub _initterm_e
-@ stub _invalid_parameter
-@ stub setjmp
-@ cdecl strnlen(str long) MSVCRT_strnlen
-@ stub _i64tow_s
-@ stub _itow_s
-@ stub _local_unwind4
-@ stub _ltow_s
-@ stub _snprintf_s
-@ stub _snwprintf_s
-@ stub _splitpath_s
-@ stub _strlwr_s
-@ stub _strupr_s
-@ stub _ui64tow_s
-@ stub _ultow_s
-@ stub _vsnprintf_s
-@ stub _vsnwprintf_s
-@ stub _wcslwr_s
-@ stub _wcsupr_s
-@ stub _wsplitpath_s
-@ stub memcpy_s
-@ stub memmove_s
-@ stub qsort_s
-@ stub sprintf_s
-@ stub sscanf_s
-@ stub strcat_s
-@ stub strcpy_s
-@ stub strncat_s
-@ stub strncpy_s
-@ stub strtok_s
-@ stub swprintf_s
-@ stub vsprintf_s
-@ stub vswprintf_s
-@ stub wcscat_s
-@ stub wcscpy_s
-@ stub wcsncat_s
-@ stub wcsncpy_s
-@ stub wcsnlen
-@ stub wcstok_s

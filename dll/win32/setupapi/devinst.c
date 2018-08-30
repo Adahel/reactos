@@ -3368,9 +3368,11 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(
         DWORD   PropertyBufferSize,
         PDWORD  RequiredSize)
 {
-    BOOL ret = FALSE;
     struct DeviceInfoSet *set = (struct DeviceInfoSet *)DeviceInfoSet;
     struct DeviceInfo *devInfo;
+    CONFIGRET cr;
+    LONG lError = ERROR_SUCCESS;
+    DWORD size;
 
     TRACE("%p %p %d %p %p %d %p\n", DeviceInfoSet, DeviceInfoData,
         Property, PropertyRegDataType, PropertyBuffer, PropertyBufferSize,
@@ -3392,108 +3394,112 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+
+    if (Property >= SPDRP_MAXIMUM_PROPERTY)
+    {
+        SetLastError(ERROR_INVALID_REG_PROPERTY);
+        return FALSE;
+    }
+
     devInfo = (struct DeviceInfo *)DeviceInfoData->Reserved;
+
     if (Property < sizeof(PropertyMap) / sizeof(PropertyMap[0])
         && PropertyMap[Property].nameW)
     {
-        DWORD size = PropertyBufferSize;
         HKEY hKey;
-        LONG l;
+        size = PropertyBufferSize;
         hKey = SetupDiOpenDevRegKey(DeviceInfoSet, DeviceInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_QUERY_VALUE);
         if (hKey == INVALID_HANDLE_VALUE)
             return FALSE;
-        l = RegQueryValueExW(hKey, PropertyMap[Property].nameW,
-                NULL, PropertyRegDataType, PropertyBuffer, &size);
+        lError = RegQueryValueExW(hKey, PropertyMap[Property].nameW,
+                 NULL, PropertyRegDataType, PropertyBuffer, &size);
         RegCloseKey(hKey);
 
         if (RequiredSize)
             *RequiredSize = size;
-        switch(l) {
+
+        switch (lError)
+        {
             case ERROR_SUCCESS:
-                if (PropertyBuffer != NULL || size == 0)
-                    ret = TRUE;
-                else
-                    SetLastError(ERROR_INSUFFICIENT_BUFFER);
+                if (PropertyBuffer == NULL && size != 0)
+                    lError = ERROR_INSUFFICIENT_BUFFER;
                 break;
             case ERROR_MORE_DATA:
-                SetLastError(ERROR_INSUFFICIENT_BUFFER);
+                lError = ERROR_INSUFFICIENT_BUFFER;
                 break;
             default:
-                SetLastError(l);
+                break;
         }
     }
     else if (Property == SPDRP_PHYSICAL_DEVICE_OBJECT_NAME)
     {
-        DWORD required = (strlenW(devInfo->Data) + 1) * sizeof(WCHAR);
+        size = (strlenW(devInfo->Data) + 1) * sizeof(WCHAR);
 
         if (PropertyRegDataType)
             *PropertyRegDataType = REG_SZ;
         if (RequiredSize)
-            *RequiredSize = required;
-        if (PropertyBufferSize >= required)
+            *RequiredSize = size;
+        if (PropertyBufferSize >= size)
         {
             strcpyW((LPWSTR)PropertyBuffer, devInfo->Data);
-            ret = TRUE;
         }
         else
-            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            lError = ERROR_INSUFFICIENT_BUFFER;
     }
     else
     {
-        ERR("Property 0x%lx not implemented\n", Property);
-        SetLastError(ERROR_NOT_SUPPORTED);
+        size = PropertyBufferSize;
+
+        cr = CM_Get_DevNode_Registry_Property_ExW(devInfo->dnDevInst,
+                                                  Property + (CM_DRP_DEVICEDESC - SPDRP_DEVICEDESC),
+                                                  PropertyRegDataType,
+                                                  PropertyBuffer,
+                                                  &size,
+                                                  0,
+                                                  set->hMachine);
+        if ((cr == CR_SUCCESS) || (cr == CR_BUFFER_SMALL))
+        {
+            if (RequiredSize)
+                *RequiredSize = size;
+        }
+
+        if (cr != CR_SUCCESS)
+        {
+            switch (cr)
+            {
+                case CR_INVALID_DEVINST:
+                    lError = ERROR_NO_SUCH_DEVINST;
+                    break;
+
+                case CR_INVALID_PROPERTY:
+                    lError = ERROR_INVALID_REG_PROPERTY;
+                    break;
+
+                case CR_BUFFER_SMALL:
+                    lError = ERROR_INSUFFICIENT_BUFFER;
+                    break;
+
+                default :
+                    lError = ERROR_INVALID_DATA;
+                    break;
+            }
+        }
     }
-    return ret;
+
+    SetLastError(lError);
+    return (lError == ERROR_SUCCESS);
 }
 
 /***********************************************************************
- *		SetupDiSetDeviceRegistryPropertyA (SETUPAPI.@)
+ *		Internal for SetupDiSetDeviceRegistryPropertyA/W
  */
-BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(
+BOOL WINAPI IntSetupDiSetDeviceRegistryPropertyAW(
         HDEVINFO DeviceInfoSet,
         PSP_DEVINFO_DATA DeviceInfoData,
         DWORD Property,
         const BYTE *PropertyBuffer,
-        DWORD PropertyBufferSize)
-{
-    BOOL ret = FALSE;
-    struct DeviceInfoSet *set = (struct DeviceInfoSet *)DeviceInfoSet;
-
-    TRACE("%p %p %d %p %d\n", DeviceInfoSet, DeviceInfoData, Property,
-        PropertyBuffer, PropertyBufferSize);
-
-    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE)
-    {
-        SetLastError(ERROR_INVALID_HANDLE);
-        return FALSE;
-    }
-    if (set->magic != SETUP_DEVICE_INFO_SET_MAGIC)
-    {
-        SetLastError(ERROR_INVALID_HANDLE);
-        return FALSE;
-    }
-    if (!DeviceInfoData || DeviceInfoData->cbSize != sizeof(SP_DEVINFO_DATA)
-            || !DeviceInfoData->Reserved)
-    {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return FALSE;
-    }
-
-    FIXME("%p %p 0x%lx %p 0x%lx\n", DeviceInfoSet, DeviceInfoData,
-        Property, PropertyBuffer, PropertyBufferSize);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return ret;
-}
-
-/***********************************************************************
- *		SetupDiSetDeviceRegistryPropertyW (SETUPAPI.@)
- */
-BOOL WINAPI SetupDiSetDeviceRegistryPropertyW(
-        HDEVINFO DeviceInfoSet,
-        PSP_DEVINFO_DATA DeviceInfoData,
-        DWORD Property,
-        const BYTE *PropertyBuffer,
-        DWORD PropertyBufferSize)
+        DWORD PropertyBufferSize,
+        BOOL isAnsi)
 {
     BOOL ret = FALSE;
     struct DeviceInfoSet *set = (struct DeviceInfoSet *)DeviceInfoSet;
@@ -3518,7 +3524,8 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyW(
         return FALSE;
     }
     if (Property < sizeof(PropertyMap) / sizeof(PropertyMap[0])
-        && PropertyMap[Property].nameW)
+        && PropertyMap[Property].nameW
+        && PropertyMap[Property].nameA)
     {
         HKEY hKey;
         LONG l;
@@ -3526,10 +3533,20 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyW(
         if (hKey == INVALID_HANDLE_VALUE)
             return FALSE;
         /* Write new data */
-        l = RegSetValueExW(
-            hKey, PropertyMap[Property].nameW, 0,
-                PropertyMap[Property].regType, PropertyBuffer,
-                PropertyBufferSize);
+        if (isAnsi)
+        {
+            l = RegSetValueExA(
+                hKey, PropertyMap[Property].nameA, 0,
+                    PropertyMap[Property].regType, PropertyBuffer,
+                    PropertyBufferSize);
+        } 
+        else
+        {
+            l = RegSetValueExW(
+                hKey, PropertyMap[Property].nameW, 0,
+                    PropertyMap[Property].regType, PropertyBuffer,
+                    PropertyBufferSize);
+        }
         if (!l)
             ret = TRUE;
         else
@@ -3544,6 +3561,41 @@ BOOL WINAPI SetupDiSetDeviceRegistryPropertyW(
 
     TRACE("Returning %d\n", ret);
     return ret;
+}
+/***********************************************************************
+ *		SetupDiSetDeviceRegistryPropertyA (SETUPAPI.@)
+ */
+BOOL WINAPI SetupDiSetDeviceRegistryPropertyA(
+        HDEVINFO DeviceInfoSet,
+        PSP_DEVINFO_DATA DeviceInfoData,
+        DWORD Property,
+        const BYTE *PropertyBuffer,
+        DWORD PropertyBufferSize)
+{
+    return IntSetupDiSetDeviceRegistryPropertyAW(DeviceInfoSet,
+                                                 DeviceInfoData,
+                                                 Property,
+                                                 PropertyBuffer,
+                                                 PropertyBufferSize,
+                                                 TRUE);
+}
+
+/***********************************************************************
+ *		SetupDiSetDeviceRegistryPropertyW (SETUPAPI.@)
+ */
+BOOL WINAPI SetupDiSetDeviceRegistryPropertyW(
+        HDEVINFO DeviceInfoSet,
+        PSP_DEVINFO_DATA DeviceInfoData,
+        DWORD Property,
+        const BYTE *PropertyBuffer,
+        DWORD PropertyBufferSize)
+{
+    return IntSetupDiSetDeviceRegistryPropertyAW(DeviceInfoSet,
+                                                 DeviceInfoData,
+                                                 Property,
+                                                 PropertyBuffer,
+                                                 PropertyBufferSize,
+                                                 FALSE);
 }
 
 /***********************************************************************
@@ -4280,16 +4332,16 @@ BOOL WINAPI SetupDiCallClassInstaller(
                     &hKey);
                 if (rc == ERROR_SUCCESS)
                 {
-                    LPWSTR lpGuidString;
-                    if (UuidToStringW((UUID*)&DeviceInfoData->ClassGuid, &lpGuidString) == RPC_S_OK)
+                    WCHAR szGuidString[40];
+                    if (pSetupStringFromGuid(&DeviceInfoData->ClassGuid, szGuidString, ARRAYSIZE(szGuidString)) == ERROR_SUCCESS)
                     {
-                        rc = RegQueryValueExW(hKey, lpGuidString, NULL, &dwRegType, NULL, &dwLength);
+                        rc = RegQueryValueExW(hKey, szGuidString, NULL, &dwRegType, NULL, &dwLength);
                         if (rc == ERROR_SUCCESS && dwRegType == REG_MULTI_SZ)
                         {
                             LPWSTR KeyBuffer = HeapAlloc(GetProcessHeap(), 0, dwLength);
                             if (KeyBuffer != NULL)
                             {
-                                rc = RegQueryValueExW(hKey, lpGuidString, NULL, NULL, (LPBYTE)KeyBuffer, &dwLength);
+                                rc = RegQueryValueExW(hKey, szGuidString, NULL, NULL, (LPBYTE)KeyBuffer, &dwLength);
                                 if (rc == ERROR_SUCCESS)
                                 {
                                     LPWSTR ptr;
@@ -4311,7 +4363,6 @@ BOOL WINAPI SetupDiCallClassInstaller(
                                 HeapFree(GetProcessHeap(), 0, KeyBuffer);
                             }
                         }
-                        RpcStringFreeW(&lpGuidString);
                     }
                     RegCloseKey(hKey);
                 }

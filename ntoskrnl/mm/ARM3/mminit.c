@@ -240,8 +240,9 @@ PMMPTE MiHighestUserPxe;
 #endif
 
 /* These variables define the system cache address space */
-PVOID MmSystemCacheStart;
+PVOID MmSystemCacheStart = (PVOID)MI_SYSTEM_CACHE_START;
 PVOID MmSystemCacheEnd;
+ULONG MmSizeOfSystemCacheInPages;
 MMSUPPORT MmSystemCacheWs;
 
 //
@@ -385,6 +386,15 @@ PFN_NUMBER MiNumberOfFreePages = 0;
 /* Timeout value for critical sections (2.5 minutes) */
 ULONG MmCritsectTimeoutSeconds = 150; // NT value: 720 * 60 * 60; (30 days)
 LARGE_INTEGER MmCriticalSectionTimeout;
+
+//
+// Throttling limits for Cc (in pages)
+// Above top, we don't throttle
+// Above bottom, we throttle depending on the amount of modified pages
+// Otherwise, we throttle!
+//
+ULONG MmThrottleTop;
+ULONG MmThrottleBottom;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -949,7 +959,7 @@ MiBuildPfnDatabaseFromLoaderBlock(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
                 Pfn1 = MiGetPfnEntry(PageFrameIndex);
 
                 /* Lock the PFN Database */
-                OldIrql = KeAcquireQueuedSpinLock(LockQueuePfnLock);
+                OldIrql = MiAcquirePfnLock();
                 while (PageCount--)
                 {
                     /* If the page really has no references, mark it as free */
@@ -966,7 +976,7 @@ MiBuildPfnDatabaseFromLoaderBlock(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
                 }
 
                 /* Release PFN database */
-                KeReleaseQueuedSpinLock(LockQueuePfnLock, OldIrql);
+                MiReleasePfnLock(OldIrql);
 
                 /* Done with this block */
                 break;
@@ -1138,7 +1148,7 @@ MmFreeLoaderBlock(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     }
 
     /* Acquire the PFN lock */
-    OldIrql = KeAcquireQueuedSpinLock(LockQueuePfnLock);
+    OldIrql = MiAcquirePfnLock();
 
     /* Loop the runs */
     LoaderPages = 0;
@@ -1180,7 +1190,7 @@ MmFreeLoaderBlock(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     /* Release the PFN lock and flush the TLB */
     DPRINT("Loader pages freed: %lx\n", LoaderPages);
-    KeReleaseQueuedSpinLock(LockQueuePfnLock, OldIrql);
+    MiReleasePfnLock(OldIrql);
     KeFlushCurrentTb();
 
     /* Free our run structure */
@@ -1779,6 +1789,8 @@ MiBuildPagedPool(VOID)
     TempPte.u.Hard.PageFrameNumber = MmSystemPageDirectory[0];
     MI_WRITE_VALID_PTE(PointerPte, TempPte);
 #endif
+
+#ifdef _M_IX86
     //
     // Let's get back to paged pool work: size it up.
     // By default, it should be twice as big as nonpaged pool.
@@ -1795,6 +1807,7 @@ MiBuildPagedPool(VOID)
         MmSizeOfPagedPoolInBytes = (ULONG_PTR)MmNonPagedSystemStart -
                                    (ULONG_PTR)MmPagedPoolStart;
     }
+#endif // _M_IX86
 
     //
     // Get the size in pages and make sure paged pool is at least 32MB.
@@ -1814,11 +1827,13 @@ MiBuildPagedPool(VOID)
     MmSizeOfPagedPoolInBytes = Size * PAGE_SIZE * 1024;
     MmSizeOfPagedPoolInPages = MmSizeOfPagedPoolInBytes >> PAGE_SHIFT;
 
+#ifdef _M_IX86
     //
     // Let's be really sure this doesn't overflow into nonpaged system VA
     //
     ASSERT((MmSizeOfPagedPoolInBytes + (ULONG_PTR)MmPagedPoolStart) <=
            (ULONG_PTR)MmNonPagedSystemStart);
+#endif // _M_IX86
 
     //
     // This is where paged pool ends
@@ -1829,7 +1844,7 @@ MiBuildPagedPool(VOID)
     //
     // Lock the PFN database
     //
-    OldIrql = KeAcquireQueuedSpinLock(LockQueuePfnLock);
+    OldIrql = MiAcquirePfnLock();
 
 #if (_MI_PAGING_LEVELS >= 3)
     /* On these systems, there's no double-mapping, so instead, the PPEs
@@ -1890,7 +1905,7 @@ MiBuildPagedPool(VOID)
     //
     // Release the PFN database lock
     //
-    KeReleaseQueuedSpinLock(LockQueuePfnLock, OldIrql);
+    MiReleasePfnLock(OldIrql);
 
     //
     // We only have one PDE mapped for now... at fault time, additional PDEs
@@ -2069,6 +2084,13 @@ MmArmInitSystem(IN ULONG Phase,
         MiHighNonPagedPoolEvent = &MiTempEvent;
 
         //
+        // Default throttling limits for Cc
+        // May be ajusted later on depending on system type
+        //
+        MmThrottleTop = 450;
+        MmThrottleBottom = 127;
+
+        //
         // Define the basic user vs. kernel address space separation
         //
         MmSystemRangeStart = (PVOID)MI_DEFAULT_SYSTEM_RANGE_START;
@@ -2119,7 +2141,7 @@ MmArmInitSystem(IN ULONG Phase,
         ASSERT(PointerPte == TestPte);
 
         /* Try a bunch of random addresses near the end of the address space */
-        PointerPte = (PMMPTE)0xFFFC8000;
+        PointerPte = (PMMPTE)((ULONG_PTR)MI_HIGHEST_SYSTEM_ADDRESS - 0x37FFF);
         for (j = 0; j < 20; j += 1)
         {
             MI_MAKE_PROTOTYPE_PTE(&TempPte, PointerPte);
@@ -2129,7 +2151,7 @@ MmArmInitSystem(IN ULONG Phase,
         }
 
         /* Subsection PTEs are always in nonpaged pool, pick a random address to try */
-        PointerPte = (PMMPTE)0xFFAACBB8;
+        PointerPte = (PMMPTE)((ULONG_PTR)MmNonPagedPoolStart + (MmSizeOfNonPagedPoolInBytes / 2));
         MI_MAKE_SUBSECTION_PTE(&TempPte, PointerPte);
         TestPte = MiSubsectionPteToSubsection(&TempPte);
         ASSERT(PointerPte == TestPte);
@@ -2234,7 +2256,7 @@ MmArmInitSystem(IN ULONG Phase,
         ExInitializePushLock(&MmSystemCacheWs.WorkingSetMutex);
 
         /* Set commit limit */
-        MmTotalCommitLimit = 2 * _1GB;
+        MmTotalCommitLimit = (2 * _1GB) >> PAGE_SHIFT;
         MmTotalCommitLimitMaximum = MmTotalCommitLimit;
 
         /* Has the allocation fragment been setup? */
@@ -2455,6 +2477,10 @@ MmArmInitSystem(IN ULONG Phase,
             /* Set Windows NT Workstation product type */
             SharedUserData->NtProductType = NtProductWinNt;
             MmProductType = 0;
+
+            /* For this product, we wait till the last moment to throttle */
+            MmThrottleTop = 250;
+            MmThrottleBottom = 30;
         }
         else
         {
@@ -2473,6 +2499,10 @@ MmArmInitSystem(IN ULONG Phase,
             /* Set the product type, and make the system more aggressive with low memory */
             MmProductType = 1;
             MmMinimumFreePages = 81;
+
+            /* We will throttle earlier to preserve memory */
+            MmThrottleTop = 450;
+            MmThrottleBottom = 80;
         }
 
         /* Update working set tuning parameters */
@@ -2488,6 +2518,14 @@ MmArmInitSystem(IN ULONG Phase,
             DPRINT1("System cache working set too big\n");
             return FALSE;
         }
+
+        /* Define limits for system cache */
+#ifdef _M_AMD64
+        MmSizeOfSystemCacheInPages = (MI_SYSTEM_CACHE_END - MI_SYSTEM_CACHE_START) / PAGE_SIZE;
+#else
+        MmSizeOfSystemCacheInPages = ((ULONG_PTR)MI_PAGED_POOL_START - (ULONG_PTR)MI_SYSTEM_CACHE_START) / PAGE_SIZE;
+#endif
+        MmSystemCacheEnd = (PVOID)((ULONG_PTR)MmSystemCacheStart + (MmSizeOfSystemCacheInPages * PAGE_SIZE) - 1);
 
         /* Initialize the system cache */
         //MiInitializeSystemCache(MmSystemCacheWsMinimum, MmAvailablePages);

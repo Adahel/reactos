@@ -19,7 +19,9 @@ Severity=Informational
 Facility=System
 SymbolicName=WINDOWS_NT_BANNER
 Language=English
-ReactOS (R) Kernel Version %hs (Build %u%hs)
+ReactOS Version %s
+Build %s
+Reporting NT %s (Build %u%s)
 .
 
 MessageId=0x87
@@ -1555,7 +1557,7 @@ Severity=Success
 Facility=System
 SymbolicName=MANUALLY_INITIATED_CRASH
 Language=English
-MANUALLY_INITIATED_CRASH
+The user manually generated the crash dump.
 .
 
 MessageId=0xE3

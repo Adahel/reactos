@@ -512,7 +512,7 @@ MiniRequestComplete(
         /* We are doing this internally, so we'll signal this event we've stashed in the MacBlock */
         ASSERT(MacBlock->Unknown1 != NULL);
         ASSERT(MacBlock->Unknown3 == NULL);
-        MacBlock->Unknown3 = (PVOID)Status;
+        MacBlock->Unknown3 = UlongToPtr(Status);
         KeSetEvent(MacBlock->Unknown1, IO_NO_INCREMENT, FALSE);
     }
 
@@ -789,7 +789,7 @@ MiniSetInformation(
   if (NdisStatus == NDIS_STATUS_PENDING)
   {
       KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
-      NdisStatus = (NDIS_STATUS)MacBlock->Unknown3;
+      NdisStatus = PtrToUlong(MacBlock->Unknown3);
   }
 
   *BytesRead = NdisRequest->DATA.SET_INFORMATION.BytesRead;
@@ -849,7 +849,7 @@ MiniQueryInformation(
   if (NdisStatus == NDIS_STATUS_PENDING)
   {
       KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
-      NdisStatus = (NDIS_STATUS)MacBlock->Unknown3;
+      NdisStatus = PtrToUlong(MacBlock->Unknown3);
   }
 
   *BytesWritten = NdisRequest->DATA.QUERY_INFORMATION.BytesWritten;
@@ -921,8 +921,8 @@ MiniReset(
 
    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
    Status = (*Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.ResetHandler)(
-            Adapter->NdisMiniportBlock.MiniportAdapterContext,
-            &AddressingReset);
+            &AddressingReset,
+            Adapter->NdisMiniportBlock.MiniportAdapterContext);
 
    KeAcquireSpinLockAtDpcLevel(&Adapter->NdisMiniportBlock.Lock);
    Adapter->NdisMiniportBlock.ResetStatus = Status;
@@ -1326,8 +1326,8 @@ MiniportWorker(IN PDEVICE_OBJECT DeviceObject, IN PVOID Context)
 
             KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
             NdisStatus = (*Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.ResetHandler)(
-                          Adapter->NdisMiniportBlock.MiniportAdapterContext,
-                          &AddressingReset);
+                          &AddressingReset,
+                          Adapter->NdisMiniportBlock.MiniportAdapterContext);
 
             KeAcquireSpinLockAtDpcLevel(&Adapter->NdisMiniportBlock.Lock);
             Adapter->NdisMiniportBlock.ResetStatus = NdisStatus;
@@ -2293,13 +2293,15 @@ NdisIDeviceIoControl(
   PLOGICAL_ADAPTER Adapter = (PLOGICAL_ADAPTER)DeviceObject->DeviceExtension;
   PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
   NDIS_STATUS Status = STATUS_NOT_SUPPORTED;
+  ULONG ControlCode;
   ULONG Written;
 
   Irp->IoStatus.Information = 0;
 
   ASSERT(Adapter);
 
-  switch (Stack->Parameters.DeviceIoControl.IoControlCode)
+  ControlCode = Stack->Parameters.DeviceIoControl.IoControlCode;
+  switch (ControlCode)
   {
     case IOCTL_NDIS_QUERY_GLOBAL_STATS:
       Status = MiniQueryInformation(Adapter,
@@ -2311,7 +2313,7 @@ NdisIDeviceIoControl(
       break;
 
     default:
-      ASSERT(FALSE);
+      NDIS_DbgPrint(MIN_TRACE, ("NdisIDeviceIoControl: unsupported control code 0x%lx\n", ControlCode));
       break;
   }
 
@@ -2577,7 +2579,8 @@ NdisGenericIrpHandler(
     if (DeviceObject->DeviceType == FILE_DEVICE_PHYSICAL_NETCARD)
     {
         if ((IrpSp->MajorFunction == IRP_MJ_CREATE) ||
-            (IrpSp->MajorFunction == IRP_MJ_CLOSE))
+            (IrpSp->MajorFunction == IRP_MJ_CLOSE) ||
+            (IrpSp->MajorFunction == IRP_MJ_CLEANUP))
         {
             return NdisICreateClose(DeviceObject, Irp);
         }

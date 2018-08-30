@@ -37,6 +37,9 @@ static WCHAR ServiceName[] = L"Lanmanserver";
 static SERVICE_STATUS_HANDLE ServiceStatusHandle;
 static SERVICE_STATUS ServiceStatus;
 
+DWORD dwServiceBits = 0;
+
+
 /* FUNCTIONS *****************************************************************/
 
 static VOID
@@ -126,6 +129,12 @@ ServiceInit(VOID)
     }
     else
         CloseHandle(hThread);
+
+    /* Report a running server service */
+    SetServiceBits(ServiceStatusHandle,
+                   SV_TYPE_SERVER,
+                   TRUE,
+                   TRUE);
 
     return ERROR_SUCCESS;
 }

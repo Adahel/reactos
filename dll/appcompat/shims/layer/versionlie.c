@@ -1,12 +1,13 @@
 /*
- * COPYRIGHT:       See COPYING in the top level directory
- * PROJECT:         ReactOS Shim library
- * FILE:            dll/appcompat/shims/layer/versionlie.c
- * PURPOSE:         Version lie shims
- * PROGRAMMER:      Mark Jansen
+ * PROJECT:     ReactOS 'Layers' Shim library
+ * LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
+ * PURPOSE:     Version lie shims
+ * COPYRIGHT:   Copyright 2016,2017 Mark Jansen (mark.jansen@reactos.org)
  */
 
-#include <windows.h>
+#define WIN32_NO_STATUS
+#include <windef.h>
+#include <winbase.h>
 #include <shimlib.h>
 #include <strsafe.h>
 
@@ -47,6 +48,8 @@ VersionLieInfo g_WinVistaSP2 = { 0x17720006, 6, 0, 6002, VER_PLATFORM_WIN32_NT, 
 
 VersionLieInfo g_Win7RTM = { 0x1db00106, 6, 1, 7600, VER_PLATFORM_WIN32_NT, 0, 0 };
 
+VersionLieInfo g_Win8RTM = { 0x23f00206, 6, 2, 9200, VER_PLATFORM_WIN32_NT, 0, 0 };
+VersionLieInfo g_Win81RTM = { 0x25800306, 6, 3, 9600, VER_PLATFORM_WIN32_NT, 0, 0 };
 
 /* Fill the OSVERSIONINFO[EX][W|A] struct with the info from the generic VersionLieInfo */
 
@@ -225,6 +228,15 @@ BOOL WINAPI SHIM_OBJ_NAME(APIHook_GetVersionExW)(LPOSVERSIONINFOEXA lpOsVersionI
 
 #define SHIM_NS         Win7RTMVersionLie
 #define VERSION_INFO    g_Win7RTM
+#include "versionlie.inl"
+
+
+#define SHIM_NS         Win8RTMVersionLie
+#define VERSION_INFO    g_Win8RTM
+#include "versionlie.inl"
+
+#define SHIM_NS         Win81RTMVersionLie
+#define VERSION_INFO    g_Win81RTM
 #include "versionlie.inl"
 
 

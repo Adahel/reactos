@@ -4,6 +4,7 @@
  * FILE:             drivers/fs/vfat/cleanup.c
  * PURPOSE:          VFAT Filesystem
  * PROGRAMMER:       Jason Filby (jasonfilby@yahoo.com)
+ *                   Pierre Schweitzer (pierre@reactos.org)
  */
 
 /* INCLUDES *****************************************************************/
@@ -25,6 +26,7 @@ VfatCleanupFile(
 {
     PVFATFCB pFcb;
     PVFATCCB pCcb;
+    BOOLEAN IsVolume;
     PDEVICE_EXTENSION DeviceExt = IrpContext->DeviceExt;
     PFILE_OBJECT FileObject = IrpContext->FileObject;
 
@@ -36,9 +38,11 @@ VfatCleanupFile(
     if (!pFcb)
         return STATUS_SUCCESS;
 
-    if (BooleanFlagOn(pFcb->Flags, FCB_IS_VOLUME))
+    IsVolume = BooleanFlagOn(pFcb->Flags, FCB_IS_VOLUME);
+    if (IsVolume)
     {
         pFcb->OpenHandleCount--;
+        DeviceExt->OpenHandleCount--;
 
         if (pFcb->OpenHandleCount != 0)
         {
@@ -47,17 +51,8 @@ VfatCleanupFile(
     }
     else
     {
-        if(!ExAcquireResourceExclusiveLite(&pFcb->MainResource,
-                                           BooleanFlagOn(IrpContext->Flags, IRPCONTEXT_CANWAIT)))
-        {
-            return STATUS_PENDING;
-        }
-        if(!ExAcquireResourceExclusiveLite(&pFcb->PagingIoResource,
-                                           BooleanFlagOn(IrpContext->Flags, IRPCONTEXT_CANWAIT)))
-        {
-            ExReleaseResourceLite(&pFcb->MainResource);
-            return STATUS_PENDING;
-        }
+        ExAcquireResourceExclusiveLite(&pFcb->MainResource, TRUE);
+        ExAcquireResourceExclusiveLite(&pFcb->PagingIoResource, TRUE);
 
         pCcb = FileObject->FsContext2;
         if (BooleanFlagOn(pCcb->Flags, CCB_DELETE_ON_CLOSE))
@@ -85,7 +80,7 @@ VfatCleanupFile(
 
         if (BooleanFlagOn(pFcb->Flags, FCB_IS_DIRTY))
         {
-            VfatUpdateEntry (pFcb, vfatVolumeIsFatX(DeviceExt));
+            VfatUpdateEntry (DeviceExt, pFcb);
         }
 
         if (BooleanFlagOn(pFcb->Flags, FCB_DELETE_PENDING) &&
@@ -104,6 +99,7 @@ VfatCleanupFile(
                 {
                     pFcb->FileObject = NULL;
                     CcUninitializeCacheMap(tmpFileObject, NULL, NULL);
+                    ClearFlag(pFcb->Flags, FCB_CACHE_INITIALIZED);
                     ObDereferenceObject(tmpFileObject);
                 }
 
@@ -121,31 +117,49 @@ VfatCleanupFile(
         {
             VfatDelEntry(DeviceExt, pFcb, NULL);
 
-            FsRtlNotifyFullReportChange(DeviceExt->NotifySync,
-                                        &(DeviceExt->NotifyList),
-                                        (PSTRING)&pFcb->PathNameU,
-                                        pFcb->PathNameU.Length - pFcb->LongNameU.Length,
-                                        NULL,
-                                        NULL,
-                                        vfatFCBIsDirectory(pFcb) ?
-                                        FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME,
-                                        FILE_ACTION_REMOVED,
-                                        NULL);
+            vfatReportChange(DeviceExt,
+                             pFcb,
+                             (vfatFCBIsDirectory(pFcb) ?
+                              FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
+                             FILE_ACTION_REMOVED);
         }
 
         if (pFcb->OpenHandleCount != 0)
         {
             IoRemoveShareAccess(FileObject, &pFcb->FCBShareAccess);
         }
+/* FIXME: causes FS corruption and breaks selfhosting/testbots and so on */
+#if 0
+        /* If that's the last open handle we just closed, try to see whether
+         * we can delay close operation
+         */
+        else if (!BooleanFlagOn(pFcb->Flags, FCB_DELETE_PENDING) && !BooleanFlagOn(pFcb->Flags, FCB_IS_PAGE_FILE) &&
+                 !BooleanFlagOn(pFcb->Flags, FCB_IS_FAT) && !BooleanFlagOn(pFcb->Flags, FCB_IS_VOLUME))
+        {
+            /* This is only allowed if that's a directory with no open files
+             * OR if it's a file with no section opened
+             */
+            if ((vfatFCBIsDirectory(pFcb) && IsListEmpty(&pFcb->ParentListHead)) ||
+                (!vfatFCBIsDirectory(pFcb) && FileObject->SectionObjectPointer->DataSectionObject == NULL &&
+                 FileObject->SectionObjectPointer->ImageSectionObject == NULL))
+            {
+                DPRINT("Delaying close of: %wZ\n", &pFcb->PathNameU);
+                SetFlag(pFcb->Flags, FCB_DELAYED_CLOSE);
+            }
+        }
+#endif
 
         FileObject->Flags |= FO_CLEANUP_COMPLETE;
+#ifdef KDBG
+        pFcb->Flags |= FCB_CLEANED_UP;
+#endif
 
         ExReleaseResourceLite(&pFcb->PagingIoResource);
         ExReleaseResourceLite(&pFcb->MainResource);
     }
 
 #ifdef ENABLE_SWAPOUT
-    if (BooleanFlagOn(DeviceExt->Flags, VCB_DISMOUNT_PENDING))
+    if (IsVolume && BooleanFlagOn(DeviceExt->Flags, VCB_DISMOUNT_PENDING))
     {
         VfatCheckForDismount(DeviceExt, FALSE);
     }
@@ -171,20 +185,9 @@ VfatCleanup(
         return STATUS_SUCCESS;
     }
 
-    if (!ExAcquireResourceExclusiveLite(&IrpContext->DeviceExt->DirResource,
-                                        BooleanFlagOn(IrpContext->Flags, IRPCONTEXT_CANWAIT)))
-    {
-        return VfatMarkIrpContextForQueue(IrpContext);
-    }
-
+    ExAcquireResourceExclusiveLite(&IrpContext->DeviceExt->DirResource, TRUE);
     Status = VfatCleanupFile(IrpContext);
-
     ExReleaseResourceLite(&IrpContext->DeviceExt->DirResource);
-
-    if (Status == STATUS_PENDING)
-    {
-        return VfatMarkIrpContextForQueue(IrpContext);
-    }
 
     IrpContext->Irp->IoStatus.Information = 0;
     return Status;

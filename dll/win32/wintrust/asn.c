@@ -18,11 +18,22 @@
  *
  */
 
-#include "wintrust_priv.h"
+#include "config.h"
+#include "wine/port.h"
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <assert.h>
-#include <snmp.h>
-#include <wine/exception.h>
+#define NONAMELESSUNION
+#include "windef.h"
+#include "winbase.h"
+#include "winerror.h"
+#include "wincrypt.h"
+#include "wintrust.h"
+#include "snmp.h"
+#include "winternl.h"
+#include "wine/debug.h"
+#include "wine/exception.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(cryptasn);
 
@@ -1830,10 +1841,10 @@ static BOOL WINAPI CRYPT_AsnDecodeOidIgnoreTag(DWORD dwCertEncodingType,
             /* The largest possible string for the first two components
              * is 2.175 (= 2 * 40 + 175 = 255), so this is big enough.
              */
-            char firstTwo[6];
+            char firstTwo[8];
             const BYTE *ptr;
 
-            snprintf(firstTwo, sizeof(firstTwo), "%d.%d",
+            sprintf(firstTwo, "%d.%d",
              pbEncoded[1 + lenBytes] / 40,
              pbEncoded[1 + lenBytes] - (pbEncoded[1 + lenBytes] / 40)
              * 40);

@@ -10,6 +10,7 @@
 
 #include "usetup.h"
 
+#define Z_SOLO
 #include <zlib.h>
 
 #define NDEBUG
@@ -544,7 +545,7 @@ CabinetOpen(VOID)
 
         if (!NT_SUCCESS(NtStatus))
         {
-            DPRINT1("NtCreateSection failed: %x\n", NtStatus);
+            DPRINT1("NtCreateSection failed for %ls: %x\n", CabinetName, NtStatus);
             return CAB_STATUS_NOMEMORY;
         }
 
@@ -954,7 +955,7 @@ CabinetExtractFile(PCAB_SEARCH Search)
 
     if (!NT_SUCCESS(NtStatus))
     {
-        DPRINT1("NtCreateSection failed: %x\n", NtStatus);
+        DPRINT1("NtCreateSection failed for %ls, %x\n", DestName, NtStatus);
         Status = CAB_STATUS_NOMEMORY;
         goto CloseDestFile;
     }

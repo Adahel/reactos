@@ -16,9 +16,26 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "wbemdisp_private.h"
+#define COBJMACROS
 
-#include <wbemcli.h>
+#include "config.h"
+#include <stdarg.h>
+
+#include "windef.h"
+#include "winbase.h"
+#include "initguid.h"
+#include "objbase.h"
+#include "wmiutils.h"
+#include "wbemcli.h"
+#include "wbemdisp.h"
+
+#include "wine/debug.h"
+#include "wine/heap.h"
+#include "wine/unicode.h"
+#include "wbemdisp_private.h"
+#include "wbemdisp_classes.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(wbemdisp);
 
 static HRESULT EnumVARIANT_create( IEnumWbemClassObject *, IEnumVARIANT ** );
 static HRESULT ISWbemSecurity_create( ISWbemSecurity ** );
@@ -408,7 +425,7 @@ static HRESULT WINAPI propertyset_Item( ISWbemPropertySet *iface, BSTR name,
     HRESULT hr;
     VARIANT var;
 
-    TRACE( "%p, %s, %08x, %p", propertyset, debugstr_w(name), flags, prop );
+    TRACE( "%p, %s, %08x, %p\n", propertyset, debugstr_w(name), flags, prop );
 
     hr = IWbemClassObject_Get( propertyset->object, name, 0, &var, NULL, NULL );
     if (SUCCEEDED(hr))

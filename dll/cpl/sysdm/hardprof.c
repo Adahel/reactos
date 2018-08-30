@@ -163,7 +163,7 @@ CopyHardwareProfile(
     if (DialogBoxParam(hApplet,
                        MAKEINTRESOURCE(IDD_COPYPROFILE),
                        hwndDlg,
-                       (DLGPROC)CopyProfileDlgProc,
+                       CopyProfileDlgProc,
                        (LPARAM)&ProfileNames) != IDOK)
         return;
 
@@ -280,7 +280,7 @@ RenameHardwareProfile(
     if (DialogBoxParam(hApplet,
                        MAKEINTRESOURCE(IDD_RENAMEPROFILE),
                        hwndDlg,
-                       (DLGPROC)RenameProfileDlgProc,
+                       RenameProfileDlgProc,
                        (LPARAM)&ProfileNames) != IDOK)
         return;
 
@@ -567,7 +567,7 @@ GetProfile(
                               L"PreferenceOrder",
                               NULL,
                               NULL,
-                              (LPBYTE)pProfile->dwPreferenceOrder,
+                              (LPBYTE)&pProfile->dwPreferenceOrder,
                               &dwSize);
     if (lError == ERROR_SUCCESS)
     {
@@ -659,11 +659,11 @@ GetProfiles(HWND hwndDlg)
 
 static
 BOOL
-OnInitDialog(HWND hwndDlg)
+OnInitHardProfDialog(HWND hwndDlg)
 {
     DWORD dwWaitInterval;
 
-    DPRINT("OnInitDialog()\n");
+    DPRINT("OnInitHardProfDialog()\n");
 
     SendMessage(GetDlgItem(hwndDlg, IDC_HRDPROFUP),
                 BM_SETIMAGE,(WPARAM)IMAGE_ICON,
@@ -732,7 +732,7 @@ HardProfDlgProc(HWND hwndDlg,
     switch (uMsg)
     {
         case WM_INITDIALOG:
-            return OnInitDialog(hwndDlg);
+            return OnInitHardProfDialog(hwndDlg);
 
         case WM_DESTROY:
             if (pProfileData != NULL)

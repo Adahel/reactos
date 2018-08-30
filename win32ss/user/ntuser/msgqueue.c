@@ -751,7 +751,7 @@ MsqCreateMessage(LPMSG Msg)
 VOID FASTCALL
 MsqDestroyMessage(PUSER_MESSAGE Message)
 {
-   TRACE("Post Destroy %d\n",PostMsgCount)
+   TRACE("Post Destroy %d\n",PostMsgCount);
    if (Message->pti == NULL)
    {
       ERR("Double Free Message\n");
@@ -1151,7 +1151,7 @@ co_MsqSendMessage(PTHREADINFO ptirec,
    }
 
    Timeout.QuadPart = Int32x32To64(-10000,uTimeout); // Pass SMTO test with a TO of 0x80000000.
-   TRACE("Timeout val %lld\n",Timeout.QuadPart)
+   TRACE("Timeout val %lld\n",Timeout.QuadPart);
 
    Message->Msg.hwnd = Wnd;
    Message->Msg.message = Msg;
@@ -2216,9 +2216,7 @@ IsThreadSuspended(PTHREADINFO pti)
    if (pti->pEThread)
    {
       BOOL Ret = TRUE;
-      ObReferenceObject(pti->pEThread);
       if (!(pti->pEThread->Tcb.SuspendCount) && !PsGetThreadFreezeCount(pti->pEThread)) Ret = FALSE;
-      ObDereferenceObject(pti->pEThread);
       return Ret;
    }
    return FALSE;
@@ -2347,7 +2345,7 @@ MsqCleanupThreadMsgs(PTHREADINFO pti)
             {
                CurrentSentMessage->flags |= SMF_RECEIVERFREE;
             }
-            
+
             if (!(CurrentSentMessage->flags & SMF_RECEIVERFREE))
             {
 
@@ -2385,7 +2383,7 @@ MsqCleanupMessageQueue(PTHREADINFO pti)
       /* cleanup posted messages */
       while (!IsListEmpty(&MessageQueue->HardwareMessagesListHead))
       {
-         CurrentEntry = MessageQueue->HardwareMessagesListHead.Flink;       
+         CurrentEntry = MessageQueue->HardwareMessagesListHead.Flink;
          CurrentMessage = CONTAINING_RECORD(CurrentEntry, USER_MESSAGE, ListEntry);
          ERR("MQ Cleanup Post Messages %p\n",CurrentMessage);
          MsqDestroyMessage(CurrentMessage);

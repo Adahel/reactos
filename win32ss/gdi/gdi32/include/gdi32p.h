@@ -27,6 +27,34 @@ typedef INT
     HANDLE hPageQuery
 );
 
+typedef BOOL
+(WINAPI* LPKETO)(
+    HDC hdc,
+    int x,
+    int y,
+    UINT fuOptions,
+    const RECT *lprc,
+    LPCWSTR lpString,
+    UINT uCount,
+    const INT *lpDx,
+    INT unknown
+);
+
+typedef DWORD
+(WINAPI* LPKGCP)(
+    HDC hdc,
+    LPCWSTR lpString,
+    INT uCount,
+    INT nMaxExtent, 
+    LPGCP_RESULTSW lpResults,
+    DWORD dwFlags,
+    DWORD dwUnused
+);
+
+extern HINSTANCE hLpk;
+extern LPKETO LpkExtTextOut;
+extern LPKGCP LpkGetCharacterPlacement;
+
 /* DEFINES *******************************************************************/
 
 #define HANDLE_LIST_INC 20
@@ -35,6 +63,9 @@ typedef INT
 #define METAFILE_DISK   2
 
 #define SAPCALLBACKDELAY 244
+
+#define LPK_ETO 1
+#define LPK_GCP 2
 
 /* MACRO ********************************************************************/
 
@@ -105,7 +136,7 @@ typedef struct tagENHMETAFILE
 #define UMPDEV_SUPPORT_ESCAPE 0x0004
 typedef struct _UMPDEV
 {
-    DWORD           Sig;            // Init with PDEV_UMPD_ID
+    DWORD_PTR       Sig;            // Init with PDEV_UMPD_ID
     struct _UMPDEV *pumpdNext;
     PDRIVER_INFO_5W pdi5Info;
     HMODULE         hModule;
@@ -202,7 +233,8 @@ FASTCALL
 DeleteRegion( HRGN );
 
 BOOL
-GdiIsHandleValid(HGDIOBJ hGdiObj);
+WINAPI
+GdiValidateHandle(HGDIOBJ);
 
 BOOL
 GdiGetHandleUserData(
@@ -280,6 +312,12 @@ WINAPI
 EnumLogFontExW2A(
     LPENUMLOGFONTEXA fontA,
     CONST ENUMLOGFONTEXW *fontW );
+
+BOOL
+WINAPI
+LoadLPK(
+    INT LpkFunctionID
+);
 
 BOOL
 WINAPI
@@ -632,6 +670,7 @@ typedef enum _DCFUNC
     DCFUNC_SetViewportOrgEx,
     DCFUNC_SetWindowExtEx,
     DCFUNC_SetWindowOrgEx,
+    DCFUNC_SetWorldTransform,
     DCFUNC_StretchBlt,
     DCFUNC_StrokeAndFillPath,
     DCFUNC_StrokePath,

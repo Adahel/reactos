@@ -43,6 +43,8 @@ typedef struct tagLOGOFF_SHUTDOWN_DATA
 
 static BOOL ExitReactOSInProgress = FALSE;
 
+LUID LuidNone = {0, 0};
+
 /* FUNCTIONS ****************************************************************/
 
 static BOOL
@@ -425,6 +427,87 @@ PlayLogonSound(
         CloseHandle(hThread);
 }
 
+static BOOL
+AllowWinstaAccess(PWLSESSION Session)
+{
+    BOOL bSuccess = FALSE;
+    DWORD dwIndex;
+    DWORD dwLength = 0;
+    PTOKEN_GROUPS ptg = NULL;
+    PSID psid;
+    TOKEN_STATISTICS Stats;
+    DWORD cbStats;
+    DWORD ret;
+
+    // Get required buffer size and allocate the TOKEN_GROUPS buffer.
+
+    if (!GetTokenInformation(Session->UserToken,
+                             TokenGroups,
+                             ptg,
+                             0,
+                             &dwLength))
+    {
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+            return FALSE;
+
+        ptg = (PTOKEN_GROUPS)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwLength);
+        if (ptg == NULL)
+            return FALSE;
+    }
+
+    // Get the token group information from the access token.
+    if (!GetTokenInformation(Session->UserToken,
+                             TokenGroups,
+                             ptg,
+                             dwLength,
+                             &dwLength))
+    {
+        goto Cleanup;
+    }
+
+    // Loop through the groups to find the logon SID.
+
+    for (dwIndex = 0; dwIndex < ptg->GroupCount; dwIndex++)
+    {
+        if ((ptg->Groups[dwIndex].Attributes & SE_GROUP_LOGON_ID)
+            == SE_GROUP_LOGON_ID)
+        {
+            psid = ptg->Groups[dwIndex].Sid;
+            break;
+        }
+    }
+
+    dwLength = GetLengthSid(psid);
+
+    if (!GetTokenInformation(Session->UserToken,
+                             TokenStatistics,
+                             &Stats,
+                             sizeof(TOKEN_STATISTICS),
+                             &cbStats))
+    {
+        WARN("Couldn't get Authentication id from user token!\n");
+        goto Cleanup;
+    }
+
+    AddAceToWindowStation(Session->InteractiveWindowStation, psid);
+
+    ret = SetWindowStationUser(Session->InteractiveWindowStation,
+                               &Stats.AuthenticationId,
+                               psid,
+                               dwLength);
+    TRACE("SetWindowStationUser returned 0x%x\n", ret);
+
+    bSuccess = TRUE;
+
+Cleanup:
+
+    // Free the buffer for the token groups.
+    if (ptg != NULL)
+        HeapFree(GetProcessHeap(), 0, (LPVOID)ptg);
+
+    return bSuccess;
+}
+
 static
 BOOL
 HandleLogon(
@@ -485,6 +568,8 @@ HandleLogon(
         goto cleanup;
     }
 
+    AllowWinstaAccess(Session);
+
     if (!StartUserShell(Session))
     {
         //WCHAR StatusMsg[256];
@@ -501,7 +586,7 @@ HandleLogon(
 
     Session->hProfileInfo = ProfileInfo.hProfile;
 
-    /* Logon has successed. Play sound. */
+    /* Logon has succeeded. Play sound. */
     PlayLogonSound(Session);
 
     ret = TRUE;
@@ -520,6 +605,8 @@ cleanup:
     RemoveStatusMessage(Session);
     if (!ret)
     {
+        SetWindowStationUser(Session->InteractiveWindowStation,
+                             &LuidNone, NULL, 0);
         CloseHandle(Session->UserToken);
         Session->UserToken = NULL;
     }
@@ -558,7 +645,7 @@ LogoffShutdownThread(
 
     uFlags = EWX_CALLER_WINLOGON | (LSData->Flags & 0x0F);
 
-    ERR("In LogoffShutdownThread with uFlags == 0x%x; exit_in_progress == %s\n",
+    TRACE("In LogoffShutdownThread with uFlags == 0x%x; exit_in_progress == %s\n",
         uFlags, ExitReactOSInProgress ? "true" : "false");
 
     ExitReactOSInProgress = TRUE;
@@ -585,7 +672,7 @@ KillComProcesses(
     DWORD ret = 1;
     PLOGOFF_SHUTDOWN_DATA LSData = (PLOGOFF_SHUTDOWN_DATA)Parameter;
 
-    ERR("In KillComProcesses\n");
+    TRACE("In KillComProcesses\n");
 
     if (LSData->Session->UserToken != NULL &&
         !ImpersonateLoggedOnUser(LSData->Session->UserToken))
@@ -791,6 +878,11 @@ HandleLogoff(
     }
 
     SwitchDesktop(Session->WinlogonDesktop);
+
+    // TODO: Play logoff sound!
+
+    SetWindowStationUser(Session->InteractiveWindowStation,
+                         &LuidNone, NULL, 0);
 
     // DisplayStatusMessage(Session, Session->WinlogonDesktop, IDS_LOGGINGOFF);
 
@@ -1045,94 +1137,6 @@ DoGenericAction(
     }
 }
 
-DWORD WINAPI SetWindowStationUser(HWINSTA hWinSta, LUID* pluid, PSID psid, DWORD sidSize);
-
-BOOL
-AddAceToWindowStation(
-    IN HWINSTA WinSta,
-    IN PSID Sid);
-
-static
-BOOL AllowWinstaAccess(PWLSESSION Session)
-{
-    BOOL bSuccess = FALSE;
-    DWORD dwIndex;
-    DWORD dwLength = 0;
-    PTOKEN_GROUPS ptg = NULL;
-    PSID psid;
-    TOKEN_STATISTICS Stats;
-    DWORD cbStats;
-    DWORD ret;
-
-    // Get required buffer size and allocate the TOKEN_GROUPS buffer.
-
-    if (!GetTokenInformation(Session->UserToken,
-                             TokenGroups,
-                             ptg,
-                             0,
-                             &dwLength))
-    {
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-            return FALSE;
-
-        ptg = (PTOKEN_GROUPS)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwLength);
-        if (ptg == NULL)
-            return FALSE;
-    }
-
-    // Get the token group information from the access token.
-    if (!GetTokenInformation(Session->UserToken,
-                             TokenGroups,
-                             ptg,
-                             dwLength,
-                             &dwLength))
-    {
-        goto Cleanup;
-    }
-
-    // Loop through the groups to find the logon SID.
-
-    for (dwIndex = 0; dwIndex < ptg->GroupCount; dwIndex++)
-    {
-        if ((ptg->Groups[dwIndex].Attributes & SE_GROUP_LOGON_ID)
-            == SE_GROUP_LOGON_ID)
-        {
-            psid = ptg->Groups[dwIndex].Sid;
-            break;
-        }
-    }
-
-    dwLength = GetLengthSid(psid);
-
-    if (!GetTokenInformation(Session->UserToken,
-                             TokenStatistics,
-                             &Stats,
-                             sizeof(TOKEN_STATISTICS),
-                             &cbStats))
-    {
-        WARN("Couldn't get Authentication id from user token!\n");
-        goto Cleanup;
-    }
-
-    AddAceToWindowStation(Session->InteractiveWindowStation, psid);
-
-    ret = SetWindowStationUser(Session->InteractiveWindowStation,
-                               &Stats.AuthenticationId,
-                               psid,
-                               dwLength);
-    TRACE("SetWindowStationUser returned 0x%x\n", ret);
-
-    bSuccess = TRUE;
-
-Cleanup:
-
-    // Free the buffer for the token groups.
-    if (ptg != NULL)
-        HeapFree(GetProcessHeap(), 0, (LPVOID)ptg);
-
-    return bSuccess;
-}
-
 static
 VOID
 DispatchSAS(
@@ -1140,7 +1144,6 @@ DispatchSAS(
     IN DWORD dwSasType)
 {
     DWORD wlxAction = WLX_SAS_ACTION_NONE;
-    HWND hwnd;
     PSID LogonSid = NULL; /* FIXME */
     BOOL bSecure = TRUE;
 
@@ -1157,9 +1160,7 @@ DispatchSAS(
                 case STATE_LOGGED_OFF:
                     Session->LogonState = STATE_LOGGED_OFF_SAS;
 
-                    hwnd = GetTopDialogWindow();
-                    if (hwnd != NULL)
-                        SendMessage(hwnd, WLX_WM_SAS, 0, 0);
+                    CloseAllDialogWindows();
 
                     Session->Options = 0;
 
@@ -1172,8 +1173,6 @@ DispatchSAS(
                         &Session->UserToken,
                         &Session->MprNotifyInfo,
                         (PVOID*)&Session->Profile);
-
-                    AllowWinstaAccess(Session);
                     break;
 
                 case STATE_LOGGED_OFF_SAS:
@@ -1192,9 +1191,7 @@ DispatchSAS(
                 case STATE_LOCKED:
                     Session->LogonState = STATE_LOCKED_SAS;
 
-                    hwnd = GetTopDialogWindow();
-                    if (hwnd != NULL)
-                        SendMessage(hwnd, WLX_WM_SAS, 0, 0);
+                    CloseAllDialogWindows();
 
                     wlxAction = (DWORD)Session->Gina.Functions.WlxWkstaLockedSAS(Session->Gina.Context, dwSasType);
                     break;
@@ -1333,7 +1330,8 @@ SASWindowProc(
                 case MAKELONG(MOD_CONTROL | MOD_SHIFT, VK_ESCAPE):
                 {
                     TRACE("SAS: CONTROL+SHIFT+ESCAPE\n");
-                    DoGenericAction(Session, WLX_SAS_ACTION_TASKLIST);
+                    if (Session->LogonState == STATE_LOGGED_ON)
+                        DoGenericAction(Session, WLX_SAS_ACTION_TASKLIST);
                     return TRUE;
                 }
             }
@@ -1377,7 +1375,9 @@ SASWindowProc(
                 case LN_SHELL_EXITED:
                 {
                     /* lParam is the exit code */
-                    if(lParam != 1)
+                    if (lParam != 1 &&
+                        Session->LogonState != STATE_LOGGED_OFF &&
+                        Session->LogonState != STATE_LOGGED_OFF_SAS)
                     {
                         SetTimer(hwndDlg, 1, 1000, NULL);
                     }
@@ -1446,7 +1446,7 @@ SASWindowProc(
                         }
                     }
 
-                    ERR("In LN_LOGOFF, exit_in_progress == %s\n",
+                    TRACE("In LN_LOGOFF, exit_in_progress == %s\n",
                         ExitReactOSInProgress ? "true" : "false");
 
                     /*

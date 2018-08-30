@@ -108,7 +108,7 @@ typedef enum _CONSRV_API_NUMBER
     ConsolepGetHistory,                     // Added in Vista+
     ConsolepSetHistory,                     // Added in Vista+
     // ConsolepSetCurrentFont,                 // Added in Vista+
-    ConsolepSetScreenBufferInfo,            // Added in Vista+
+    // ConsolepSetScreenBufferInfo,            // Added in Vista+
     // ConsolepClientConnect,                  // Added in Win7
 
     ConsolepMaxApiNumber

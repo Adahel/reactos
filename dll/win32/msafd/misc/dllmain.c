@@ -15,9 +15,6 @@
 #include <winuser.h>
 #include <wchar.h>
 
-#include <wine/debug.h>
-WINE_DEFAULT_DEBUG_CHANNEL(msafd);
-
 HANDLE GlobalHeap;
 WSPUPCALLTABLE Upcalls;
 DWORD CatalogEntryId; /* CatalogEntryId for upcalls */
@@ -78,17 +75,17 @@ WSPSocket(int AddressFamily,
     if (lpProtocolInfo && lpProtocolInfo->dwServiceFlags3 != 0 && lpProtocolInfo->dwServiceFlags4 != 0)
     {
         /* Duplpicating socket from different process */
-        if ((HANDLE)lpProtocolInfo->dwServiceFlags3 == INVALID_HANDLE_VALUE)
+        if (UlongToPtr(lpProtocolInfo->dwServiceFlags3) == INVALID_HANDLE_VALUE)
         {
             Status = WSAEINVAL;
             goto error;
         }
-        if ((HANDLE)lpProtocolInfo->dwServiceFlags4 == INVALID_HANDLE_VALUE)
+        if (UlongToPtr(lpProtocolInfo->dwServiceFlags4) == INVALID_HANDLE_VALUE)
         {
             Status = WSAEINVAL;
             goto error;
         }
-        SharedData = MapViewOfFile((HANDLE)lpProtocolInfo->dwServiceFlags3,
+        SharedData = MapViewOfFile(UlongToPtr(lpProtocolInfo->dwServiceFlags3),
                                    FILE_MAP_ALL_ACCESS,
                                    0,
                                    0,
@@ -186,8 +183,8 @@ WSPSocket(int AddressFamily,
     if (SharedData)
     {
         Socket->SharedData = SharedData;
-        Socket->SharedDataHandle = (HANDLE)lpProtocolInfo->dwServiceFlags3;
-        Sock = (HANDLE)lpProtocolInfo->dwServiceFlags4;
+        Socket->SharedDataHandle = UlongToHandle(lpProtocolInfo->dwServiceFlags3);
+        Sock = UlongToHandle(lpProtocolInfo->dwServiceFlags4);
         Socket->Handle = (SOCKET)lpProtocolInfo->dwServiceFlags4;
     }
     else
@@ -425,7 +422,7 @@ error:
     if( SharedData )
     {
         UnmapViewOfFile(SharedData);
-        NtClose((HANDLE)lpProtocolInfo->dwServiceFlags3);
+        NtClose(UlongToHandle(lpProtocolInfo->dwServiceFlags3));
     }
     else
     {
@@ -526,8 +523,8 @@ WSPDuplicateSocket(
     lpProtocolInfo->iAddressFamily = Socket->SharedData->AddressFamily;
     lpProtocolInfo->iProtocol = Socket->SharedData->Protocol;
     lpProtocolInfo->iSocketType = Socket->SharedData->SocketType;
-    lpProtocolInfo->dwServiceFlags3 = (DWORD)hDuplicatedSharedData;
-    lpProtocolInfo->dwServiceFlags4 = (DWORD)hDuplicatedHandle;
+    lpProtocolInfo->dwServiceFlags3 = HandleToUlong(hDuplicatedSharedData);
+    lpProtocolInfo->dwServiceFlags4 = HandleToUlong(hDuplicatedHandle);
 
     if( lpErrno )
         *lpErrno = NO_ERROR;
@@ -581,6 +578,9 @@ TranslateNtStatusError(NTSTATUS Status)
 
        case STATUS_NETWORK_UNREACHABLE:
           return WSAENETUNREACH;
+
+       case STATUS_HOST_UNREACHABLE:
+          return WSAEHOSTUNREACH;
 
        case STATUS_INVALID_PARAMETER:
           return WSAEINVAL;
@@ -643,7 +643,7 @@ WSPCloseSocket(IN SOCKET Handle,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if(!NT_SUCCESS(Status))
@@ -886,7 +886,7 @@ WSPBind(SOCKET Handle,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if (!NT_SUCCESS(Status))
@@ -903,7 +903,7 @@ WSPBind(SOCKET Handle,
 
     /* Set up Address in TDI Format */
     BindData->Address.TAAddressCount = 1;
-    BindData->Address.Address[0].AddressLength = SocketAddressLength - sizeof(SocketAddress->sa_family);
+    BindData->Address.Address[0].AddressLength = (USHORT)(SocketAddressLength - sizeof(SocketAddress->sa_family));
     BindData->Address.Address[0].AddressType = SocketAddress->sa_family;
     RtlCopyMemory (BindData->Address.Address[0].Address,
                    SocketAddress->sa_data,
@@ -1001,7 +1001,7 @@ WSPListen(SOCKET Handle,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if( !NT_SUCCESS(Status) )
@@ -1148,7 +1148,7 @@ WSPSelect(IN int nfds,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if(!NT_SUCCESS(Status))
@@ -1427,14 +1427,16 @@ GetCurrentTimeInSeconds(VOID)
     return (DWORD)((Time.ll - u1970.ll) / 10000000ULL);
 }
 
+_Must_inspect_result_
 SOCKET
 WSPAPI
-WSPAccept(SOCKET Handle,
-          struct sockaddr *SocketAddress,
-          int *SocketAddressLength,
-          LPCONDITIONPROC lpfnCondition,
-          DWORD dwCallbackData,
-          LPINT lpErrno)
+WSPAccept(
+    _In_ SOCKET Handle,
+    _Out_writes_bytes_to_opt_(*addrlen, *addrlen) struct sockaddr FAR *SocketAddress,
+    _Inout_opt_ LPINT SocketAddressLength,
+    _In_opt_ LPCONDITIONPROC lpfnCondition,
+    _In_opt_ DWORD_PTR dwCallbackData,
+    _Out_ LPINT lpErrno)
 {
     IO_STATUS_BLOCK             IOSB;
     PAFD_RECEIVED_ACCEPT_DATA   ListenReceiveData;
@@ -1480,7 +1482,7 @@ WSPAccept(SOCKET Handle,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if( !NT_SUCCESS(Status) )
@@ -1854,7 +1856,7 @@ WSPConnect(SOCKET Handle,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if (!NT_SUCCESS(Status))
@@ -2090,7 +2092,7 @@ WSPShutdown(SOCKET Handle,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if( !NT_SUCCESS(Status) )
@@ -2176,7 +2178,7 @@ WSPGetSockName(IN SOCKET Handle,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if( !NT_SUCCESS(Status) )
@@ -2283,7 +2285,7 @@ WSPGetPeerName(IN SOCKET s,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if( !NT_SUCCESS(Status) )
@@ -2885,14 +2887,15 @@ SendToHelper:
  * RETURNS:
  *     Status of operation
  */
-INT
+_Must_inspect_result_
+int
 WSPAPI
-WSPStartup(IN  WORD wVersionRequested,
-           OUT LPWSPDATA lpWSPData,
-           IN  LPWSAPROTOCOL_INFOW lpProtocolInfo,
-           IN  WSPUPCALLTABLE UpcallTable,
-           OUT LPWSPPROC_TABLE lpProcTable)
-
+WSPStartup(
+    _In_ WORD wVersionRequested,
+    _In_ LPWSPDATA lpWSPData,
+    _In_ LPWSAPROTOCOL_INFOW lpProtocolInfo,
+    _In_ WSPUPCALLTABLE UpcallTable,
+    _Out_ LPWSPPROC_TABLE lpProcTable)
 {
     NTSTATUS Status;
 
@@ -2959,7 +2962,7 @@ WSPAddressToString(IN LPSOCKADDR lpsaAddress,
                    IN OUT LPDWORD lpdwAddressStringLength,
                    OUT LPINT lpErrno)
 {
-    DWORD size;
+    SIZE_T size;
     WCHAR buffer[54]; /* 32 digits + 7':' + '[' + '%" + 5 digits + ']:' + 5 digits + '\0' */
     WCHAR *p;
 
@@ -3179,7 +3182,7 @@ GetSocketInformation(PSOCKET_INFORMATION Socket,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if( !NT_SUCCESS(Status) )
@@ -3304,7 +3307,7 @@ SetSocketInformation(PSOCKET_INFORMATION Socket,
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if( !NT_SUCCESS(Status) )
@@ -3438,7 +3441,7 @@ int CreateContext(PSOCKET_INFORMATION Socket)
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
                            NULL,
-                           1,
+                           SynchronizationEvent,
                            FALSE);
 
     if( !NT_SUCCESS(Status) )
@@ -3524,7 +3527,7 @@ BOOLEAN SockCreateOrReferenceAsyncThread(VOID)
     /* Create the Async Thread */
     hAsyncThread = CreateThread(NULL,
                                 0,
-                                (LPTHREAD_START_ROUTINE)SockAsyncThread,
+                                SockAsyncThread,
                                 NULL,
                                 0,
                                 &AsyncThreadId);
@@ -3537,7 +3540,9 @@ BOOLEAN SockCreateOrReferenceAsyncThread(VOID)
     return TRUE;
 }
 
-int SockAsyncThread(PVOID ThreadParam)
+ULONG
+NTAPI
+SockAsyncThread(PVOID ThreadParam)
 {
     PVOID AsyncContext;
     PASYNC_COMPLETION_ROUTINE AsyncCompletionRoutine;

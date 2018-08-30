@@ -106,12 +106,6 @@ LsaIFree_LSAPR_PRIVILEGE_SET(IN PLSAPR_PRIVILEGE_SET Ptr);
 typedef wchar_t *PSAMPR_SERVER_NAME;
 typedef void *SAMPR_HANDLE;
 
-typedef struct _SAMPR_ULONG_ARRAY
-{
-    unsigned long Count;
-    unsigned long *Element;
-} SAMPR_ULONG_ARRAY, *PSAMPR_ULONG_ARRAY;
-
 typedef struct _SAMPR_SID_INFORMATION
 {
     PRPC_SID SidPointer;
@@ -392,7 +386,7 @@ LsapAllocateClientBuffer(IN PLSA_CLIENT_REQUEST ClientRequest,
                          OUT PVOID *ClientBaseAddress)
 {
     PLSAP_LOGON_CONTEXT LogonContext;
-    ULONG Length;
+    SIZE_T Length;
 
     *ClientBaseAddress = NULL;
 
@@ -415,7 +409,7 @@ LsapFreeClientBuffer(IN PLSA_CLIENT_REQUEST ClientRequest,
                      IN PVOID ClientBaseAddress)
 {
     PLSAP_LOGON_CONTEXT LogonContext;
-    ULONG Length;
+    SIZE_T Length;
 
     if (ClientBaseAddress == NULL)
         return STATUS_SUCCESS;
@@ -1143,7 +1137,7 @@ LsapSetTokenOwner(
     IN LSA_TOKEN_INFORMATION_TYPE TokenInformationType)
 {
     PLSA_TOKEN_INFORMATION_V1 TokenInfo1;
-    PSID OwnerSid = NULL;
+    PSID_AND_ATTRIBUTES OwnerSid = NULL;
     ULONG i, Length;
 
     if (TokenInformationType == LsaTokenInformationV1)
@@ -1153,24 +1147,25 @@ LsapSetTokenOwner(
         if (TokenInfo1->Owner.Owner != NULL)
             return STATUS_SUCCESS;
 
-        OwnerSid = TokenInfo1->User.User.Sid;
+        OwnerSid = &TokenInfo1->User.User;
         for (i = 0; i < TokenInfo1->Groups->GroupCount; i++)
         {
             if (EqualSid(TokenInfo1->Groups->Groups[i].Sid, LsapAdministratorsSid))
             {
-                OwnerSid = LsapAdministratorsSid;
+                OwnerSid = &TokenInfo1->Groups->Groups[i];
                 break;
             }
         }
 
-        Length = RtlLengthSid(OwnerSid);
+        Length = RtlLengthSid(OwnerSid->Sid);
         TokenInfo1->Owner.Owner = DispatchTable.AllocateLsaHeap(Length);
         if (TokenInfo1->Owner.Owner == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
 
         RtlCopyMemory(TokenInfo1->Owner.Owner,
-                      OwnerSid,
+                      OwnerSid->Sid,
                       Length);
+        OwnerSid->Attributes |= SE_GROUP_OWNER;
     }
 
     return STATUS_SUCCESS;
@@ -1556,6 +1551,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
 
     if (TokenInformationType == LsaTokenInformationV1)
     {
+        TOKEN_PRIVILEGES NoPrivilege = {0};
         TokenInfo1 = (PLSA_TOKEN_INFORMATION_V1)TokenInformation;
 
         Qos.Length = sizeof(SECURITY_QUALITY_OF_SERVICE);
@@ -1579,7 +1575,8 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
                                &TokenInfo1->ExpirationTime,
                                &TokenInfo1->User,
                                TokenInfo1->Groups,
-                               TokenInfo1->Privileges,
+                               TokenInfo1->Privileges ? TokenInfo1->Privileges
+                                                      : &NoPrivilege,
                                &TokenInfo1->Owner,
                                &TokenInfo1->PrimaryGroup,
                                &TokenInfo1->DefaultDacl,

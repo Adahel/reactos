@@ -384,6 +384,15 @@ ObpDeleteObjectType(
     IN PVOID Object
 );
 
+NTSTATUS
+NTAPI
+ObReferenceFileObjectForWrite(
+    IN HANDLE Handle,
+    IN KPROCESSOR_MODE AccessMode,
+    OUT PFILE_OBJECT *FileObject,
+    OUT POBJECT_HANDLE_INFORMATION HandleInformation
+);
+
 //
 // DOS Devices Functions
 //
@@ -592,8 +601,8 @@ extern ULONG ObpTraceLevel;
 extern KEVENT ObpDefaultObject;
 extern KGUARDED_MUTEX ObpDeviceMapLock;
 extern POBJECT_TYPE ObpTypeObjectType;
-extern POBJECT_TYPE ObSymbolicLinkType;
-extern POBJECT_TYPE ObpTypeObjectType;
+extern POBJECT_TYPE ObpDirectoryObjectType;
+extern POBJECT_TYPE ObpSymbolicLinkObjectType;
 extern POBJECT_DIRECTORY ObpRootDirectoryObject;
 extern POBJECT_DIRECTORY ObpTypeDirectoryObject;
 extern PHANDLE_TABLE ObpKernelHandleTable;

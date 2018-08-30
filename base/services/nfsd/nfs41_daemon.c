@@ -23,6 +23,9 @@
 #include <process.h>
 #include <tchar.h>
 #include <stdio.h>
+#ifdef __REACTOS__
+#include <strsafe.h>
+#endif
 
 #include <devioctl.h>
 #include <lmcons.h> /* UNLEN for GetUserName() */
@@ -38,7 +41,9 @@
 #define MAX_NUM_THREADS 128
 DWORD NFS41D_VERSION = 0;
 
+#ifndef __REACTOS__
 static const char FILE_NETCONFIG[] = "C:\\ReactOS\\System32\\drivers\\etc\\netconfig";
+#endif
 
 /* Globals */
 char localdomain_name[NFS41_HOSTNAME_LEN];
@@ -163,10 +168,29 @@ typedef struct _nfsd_args {
 static bool_t check_for_files()
 {
     FILE *fd;
+#ifdef __REACTOS__
+    char config_path[MAX_PATH];
+
+    if (GetSystemDirectoryA(config_path, ARRAYSIZE(config_path)))
+    {
+        StringCchCatA(config_path, ARRAYSIZE(config_path), "\\drivers\\etc\\netconfig");
+    }
+    else
+    {
+        StringCchCopyA(config_path, ARRAYSIZE(config_path), "C:\\ReactOS\\system32\\drivers\\etc\\netconfig");
+    }
+
+    fd = fopen(config_path, "r");
+#else
      
     fd = fopen(FILE_NETCONFIG, "r");
+#endif
     if (fd == NULL) {
+#ifdef __REACTOS__
+        fprintf(stderr,"nfsd() failed to open file '%s'\n", config_path);
+#else
         fprintf(stderr,"nfsd() failed to open file '%s'\n", FILE_NETCONFIG);
+#endif
         return FALSE;
     }
     fclose(fd);
@@ -309,8 +333,17 @@ static int getdomainname()
                             (socklen_t)ptr->ai_addrlen, hostname, NI_MAXHOST, 
                             servInfo, NI_MAXSERV, NI_NAMEREQD);
                 if (status)
+#if 0
                     dprintf(1, "getnameinfo failed %d\n", WSAGetLastError());
                 else {
+#else
+                {
+                    dprintf(1, "getnameinfo failed %d, forcing name\n", WSAGetLastError());
+                    memcpy(hostname, "reactos.home", sizeof("reactos.home"));
+                    status = 0;
+                }
+                {
+#endif
                     size_t i, len = strlen(hostname);
                     char *p = hostname;
                     dprintf(1, "getdomainname: hostname %s %d\n", hostname, len);

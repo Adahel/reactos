@@ -56,8 +56,7 @@ function(add_asm16_bin _target _binary_file _base_address)
 
     add_custom_target(${_target} ALL DEPENDS ${_binary_file})
     # set_target_properties(${_target} PROPERTIES OUTPUT_NAME ${_target} SUFFIX ".bin")
-    set_target_properties(${_target} PROPERTIES LOCATION_${CMAKE_BUILD_TYPE} ${_binary_file}) ## Support of $<TARGET_FILE:xxx> is limited to add_executable() or add_library()
-    set_target_properties(${_target} PROPERTIES LOCATION ${_binary_file})                     ## Support of $<TARGET_FILE:xxx> is limited to add_executable() or add_library()
+    set_target_properties(${_target} PROPERTIES BINARY_PATH ${_binary_file})
     add_clean_target(${_target})
 endfunction()
 
@@ -107,9 +106,10 @@ function(add_asm16_bin _target _binary_file _base_address)
         set(_pp_asm16_compile_command ${CMAKE_ASM16_COMPILER} /nologo /Cp /Fo${_object_file} /c /Ta ${_preprocessed_asm_file})
     endif()
 
+    # FIXME: clang-cl can't compile this so use cl here instead of ${CMAKE_C_COMPILER} in the meantime
     add_custom_command(
         OUTPUT ${_preprocessed_asm_file} ${_object_file}
-        COMMAND ${CMAKE_C_COMPILER} /nologo /X /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm ${_directory_includes} ${_source_file_defines} ${_directory_defines} /D__ASM__ /D_USE_ML /EP /c ${_concatenated_asm_file} > ${_preprocessed_asm_file} && ${_pp_asm16_compile_command}
+        COMMAND cl /nologo /X /I${REACTOS_SOURCE_DIR}/sdk/include/asm /I${REACTOS_BINARY_DIR}/sdk/include/asm ${_directory_includes} ${_source_file_defines} ${_directory_defines} /D__ASM__ /D_USE_ML /EP /c ${_concatenated_asm_file} > ${_preprocessed_asm_file} && ${_pp_asm16_compile_command}
         DEPENDS ${_concatenated_asm_file})
 
     add_custom_command(
@@ -119,8 +119,7 @@ function(add_asm16_bin _target _binary_file _base_address)
 
     add_custom_target(${_target} ALL DEPENDS ${_binary_file})
     # set_target_properties(${_target} PROPERTIES OUTPUT_NAME ${_target} SUFFIX ".bin")
-    set_target_properties(${_target} PROPERTIES LOCATION_${CMAKE_BUILD_TYPE} ${_binary_file}) ## Support of $<TARGET_FILE:xxx> is limited to add_executable() or add_library()
-    set_target_properties(${_target} PROPERTIES LOCATION ${_binary_file})                     ## Support of $<TARGET_FILE:xxx> is limited to add_executable() or add_library()
+    set_target_properties(${_target} PROPERTIES BINARY_PATH ${_binary_file})
     add_clean_target(${_target})
 endfunction()
 

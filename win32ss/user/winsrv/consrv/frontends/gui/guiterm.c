@@ -56,13 +56,6 @@ UnRegisterConWndClass(HINSTANCE hInstance);
 
 /* FUNCTIONS ******************************************************************/
 
-/* NOTE: Defined in conwnd.c */
-VOID
-GetScreenBufferSizeUnits(IN PCONSOLE_SCREEN_BUFFER Buffer,
-                         IN PGUI_CONSOLE_DATA GuiData,
-                         OUT PUINT WidthUnit,
-                         OUT PUINT HeightUnit);
-
 VOID
 GuiConsoleMoveWindow(PGUI_CONSOLE_DATA GuiData)
 {
@@ -76,20 +69,6 @@ GuiConsoleMoveWindow(PGUI_CONSOLE_DATA GuiData)
                      0, 0,
                      SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
     }
-}
-
-static VOID
-SmallRectToRect(PGUI_CONSOLE_DATA GuiData, PRECT Rect, PSMALL_RECT SmallRect)
-{
-    PCONSOLE_SCREEN_BUFFER Buffer = GuiData->ActiveBuffer;
-    UINT WidthUnit, HeightUnit;
-
-    GetScreenBufferSizeUnits(Buffer, GuiData, &WidthUnit, &HeightUnit);
-
-    Rect->left   = (SmallRect->Left       - Buffer->ViewOrigin.X) * WidthUnit ;
-    Rect->top    = (SmallRect->Top        - Buffer->ViewOrigin.Y) * HeightUnit;
-    Rect->right  = (SmallRect->Right  + 1 - Buffer->ViewOrigin.X) * WidthUnit ;
-    Rect->bottom = (SmallRect->Bottom + 1 - Buffer->ViewOrigin.Y) * HeightUnit;
 }
 
 static VOID
@@ -117,8 +96,6 @@ InvalidateCell(PGUI_CONSOLE_DATA GuiData,
  *                        GUI Terminal Initialization                         *
  ******************************************************************************/
 
-VOID
-SwitchFullScreen(PGUI_CONSOLE_DATA GuiData, BOOL FullScreen);
 VOID
 CreateSysMenu(HWND hWnd);
 
@@ -224,9 +201,7 @@ GuiConsoleInputThread(PVOID Param)
                     if (GuiData->GuiInfo.FullScreen) SwitchFullScreen(GuiData, TRUE);
 
                     DPRINT("PM_CREATE_CONSOLE -- showing window\n");
-                    // ShowWindow(NewWindow, (int)GuiData->GuiInfo.ShowWindow);
                     ShowWindowAsync(NewWindow, (int)GuiData->GuiInfo.ShowWindow);
-                    DPRINT("Window showed\n");
                 }
                 else
                 {
@@ -250,13 +225,10 @@ GuiConsoleInputThread(PVOID Param)
                  * that the window that we want to destroy doesn't exist yet.
                  * So first empty the message queue.
                  */
-                /*
                 while (PeekMessageW(&TempMsg, NULL, 0, 0, PM_REMOVE))
                 {
-                    TranslateMessage(&TempMsg);
                     DispatchMessageW(&TempMsg);
-                }*/
-                while (PeekMessageW(&TempMsg, NULL, 0, 0, PM_REMOVE)) ;
+                }
 
                 if (GuiData->hWindow == NULL) continue;
 
@@ -352,7 +324,7 @@ GuiInit(IN PCONSOLE_INIT_INFO ConsoleInitInfo,
 
     hDesk = NtUserResolveDesktop(ConsoleLeaderProcessHandle,
                                  &DesktopPath,
-                                 0,
+                                 FALSE,
                                  &hWinSta);
     DPRINT("NtUserResolveDesktop(DesktopPath = '%wZ') returned hDesk = 0x%p; hWinSta = 0x%p\n",
            &DesktopPath, hDesk, hWinSta);
@@ -1198,6 +1170,7 @@ GuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
 {
     PCONSOLE_START_INFO ConsoleStartInfo;
     PGUI_INIT_INFO GuiInitInfo;
+    USEROBJECTFLAGS UserObjectFlags;
 
     if (FrontEnd == NULL || ConsoleInfo == NULL || ConsoleInitInfo == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -1218,6 +1191,21 @@ GuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
         return STATUS_UNSUCCESSFUL;
     }
 
+    GuiInitInfo->IsWindowVisible = ConsoleInitInfo->IsWindowVisible;
+    if (GuiInitInfo->IsWindowVisible)
+    {
+        /* Don't show the console if the window station is not interactive */
+        if (GetUserObjectInformationW(GuiInitInfo->WinSta,
+                                      UOI_FLAGS,
+                                      &UserObjectFlags,
+                                      sizeof(UserObjectFlags),
+                                      NULL))
+        {
+            if (!(UserObjectFlags.dwFlags & WSF_VISIBLE))
+                GuiInitInfo->IsWindowVisible = FALSE;
+        }
+    }
+
     /*
      * Load terminal settings
      */
@@ -1233,7 +1221,7 @@ GuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
 
     GuiInitInfo->TermInfo.ShowWindow = SW_SHOWNORMAL;
 
-    if (ConsoleInitInfo->IsWindowVisible)
+    if (GuiInitInfo->IsWindowVisible)
     {
         /* 2. Load the remaining console settings via the registry */
         if ((ConsoleStartInfo->dwStartupFlags & STARTF_TITLEISLINKNAME) == 0)
@@ -1280,7 +1268,6 @@ GuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
 
     // Display
     GuiInitInfo->TermInfo.FullScreen   = ConsoleInfo->FullScreen;
-    // GuiInitInfo->TermInfo.ShowWindow;
     GuiInitInfo->TermInfo.AutoPosition = ConsoleInfo->AutoPosition;
     GuiInitInfo->TermInfo.WindowOrigin = ConsoleInfo->WindowPosition;
 
@@ -1296,8 +1283,6 @@ GuiLoadFrontEnd(IN OUT PFRONTEND FrontEnd,
         // GuiInitInfo->hIconSm = ghDefaultIconSm;
 
     // ASSERT(GuiInitInfo->hIcon && GuiInitInfo->hIconSm);
-
-    GuiInitInfo->IsWindowVisible = ConsoleInitInfo->IsWindowVisible;
 
     /* Finally, initialize the frontend structure */
     FrontEnd->Vtbl     = &GuiVtbl;

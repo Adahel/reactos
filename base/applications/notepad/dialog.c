@@ -496,7 +496,7 @@ DIALOG_FileSaveAs_Hook(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             {
                 hCombo = GetDlgItem(hDlg, ID_ENCODING);
                 if (hCombo)
-                    Globals.encFile = (int) SendMessage(hCombo, CB_GETCURSEL, 0, 0);
+                    Globals.encFile = (ENCODING) SendMessage(hCombo, CB_GETCURSEL, 0, 0);
 
                 hCombo = GetDlgItem(hDlg, ID_EOLN);
                 if (hCombo)
@@ -849,7 +849,7 @@ VOID DoCreateStatusBar(VOID)
     }
 
     /* Set status bar visiblity according to the settings. */
-    if (Globals.bWrapLongLines == TRUE || Globals.bShowStatusBar == FALSE)
+    if ((Globals.bWrapLongLines != FALSE) || (Globals.bShowStatusBar == FALSE))
     {
         bStatusBarVisible = FALSE;
         ShowWindow(Globals.hStatusBar, SW_HIDE);
@@ -1043,6 +1043,12 @@ typedef HWND (WINAPI *FINDPROC)(LPFINDREPLACE lpfr);
 
 static VOID DIALOG_SearchDialog(FINDPROC pfnProc)
 {
+    if (Globals.hFindReplaceDlg != NULL)
+    {
+        SetFocus(Globals.hFindReplaceDlg);
+        return;
+    }
+
     ZeroMemory(&Globals.find, sizeof(Globals.find));
     Globals.find.lStructSize = sizeof(Globals.find);
     Globals.find.hwndOwner = Globals.hMainWnd;
@@ -1057,7 +1063,7 @@ static VOID DIALOG_SearchDialog(FINDPROC pfnProc)
     /* notify us of incoming events using hMainWnd Window Messages    */
 
     Globals.hFindReplaceDlg = pfnProc(&Globals.find);
-    assert(Globals.hFindReplaceDlg != 0);
+    assert(Globals.hFindReplaceDlg != NULL);
 }
 
 VOID DIALOG_Search(VOID)

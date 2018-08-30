@@ -10,7 +10,6 @@ add_definitions(
     -DHAVE_STAT
     -DHAVE_WIN32_THREADS
     -D_REENTRANT
-    -D_WINSOCKAPI_
     -DLIBXML_STATIC)
 
 list(APPEND SOURCE
@@ -47,9 +46,6 @@ endif()
 add_pch(libxslt precomp.h SOURCE)
 add_cd_file(TARGET libxslt DESTINATION reactos/system32 FOR all)
 
-if(NOT MSVC)
+if(USE_CLANG_CL OR (NOT MSVC))
     add_target_compile_flags(libxslt "-Wno-pointer-sign -Wno-unused-function")
-    if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
-        add_target_compile_flags(libxslt "-Wno-unused-but-set-variable")
-    endif()
 endif()
