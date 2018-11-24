@@ -1474,7 +1474,9 @@ static HRESULT _SHGetUserShellFolderPath(HKEY rootKey, HANDLE hToken, LPCWSTR us
 #ifndef __REACTOS__
             _SHExpandEnvironmentStrings(path, szTemp);
 #else
-            _SHExpandEnvironmentStrings(hToken, path, szTemp, _countof(szTemp));
+            hr = _SHExpandEnvironmentStrings(hToken, path, szTemp, _countof(szTemp));
+            if (FAILED(hr))
+                goto end;
 #endif
             lstrcpynW(path, szTemp, MAX_PATH);
         }
@@ -1487,6 +1489,9 @@ static HRESULT _SHGetUserShellFolderPath(HKEY rootKey, HANDLE hToken, LPCWSTR us
     }
     else
         hr = E_FAIL;
+#ifdef __REACTOS__
+end:
+#endif
     RegCloseKey(shellFolderKey);
     RegCloseKey(userShellFolderKey);
     TRACE("returning 0x%08x\n", hr);
@@ -1971,7 +1976,7 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
 #else
             DWORD cchSize = cchDest;
             if (!GetAllUsersProfileDirectoryW(szDest, &cchSize))
-                return HRESULT_FROM_WIN32(GetLastError());
+                goto fallback_expand;
 #endif
             PathAppendW(szDest, szTemp + strlenW(AllUsersProfileW));
         }
@@ -1987,7 +1992,7 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
 #else
             DWORD cchSize = cchDest;
             if (!_SHGetUserProfileDirectoryW(hToken, szDest, &cchSize))
-                return HRESULT_FROM_WIN32(GetLastError());
+                goto fallback_expand;
 #endif
             PathAppendW(szDest, szTemp + strlenW(UserProfileW));
         }
@@ -1997,7 +2002,7 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
             GetSystemDirectoryW(szDest, MAX_PATH);
 #else
             if (!GetSystemDirectoryW(szDest, cchDest))
-                return HRESULT_FROM_WIN32(GetLastError());
+                goto fallback_expand;
 #endif
             if (szDest[1] != ':')
             {
@@ -2011,11 +2016,14 @@ static HRESULT _SHExpandEnvironmentStrings(HANDLE hToken, LPCWSTR szSrc, LPWSTR 
             }
         }
         else
+#ifdef __REACTOS__
+fallback_expand:
+#endif
         {
 #ifndef __REACTOS__
             DWORD ret = ExpandEnvironmentStringsW(szSrc, szDest, MAX_PATH);
 #else
-            DWORD ret = SHExpandEnvironmentStringsForUserW(hToken, szSrc, szDest, cchDest);
+            DWORD ret = SHExpandEnvironmentStringsForUserW(hToken, szTemp, szDest, cchDest);
 #endif
 
 #ifndef __REACTOS__

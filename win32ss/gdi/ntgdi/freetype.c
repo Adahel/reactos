@@ -828,7 +828,7 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
     FONTGDI *           FontGDI;
     NTSTATUS            Status;
     FT_Face             Face;
-    ANSI_STRING         AnsiFaceName;
+    ANSI_STRING         AnsiString;
     FT_WinFNT_HeaderRec WinFNT;
     INT                 FaceCount = 0, CharSetCount = 0;
     PUNICODE_STRING     pFileName       = pLoadFont->pFileName;
@@ -950,8 +950,24 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
     FontGDI->OriginalWeight = WeightFromStyle(Face->style_name);
     FontGDI->RequestWeight = FW_NORMAL;
 
-    RtlInitAnsiString(&AnsiFaceName, Face->family_name);
-    Status = RtlAnsiStringToUnicodeString(&Entry->FaceName, &AnsiFaceName, TRUE);
+    RtlInitAnsiString(&AnsiString, Face->family_name);
+    Status = RtlAnsiStringToUnicodeString(&Entry->FaceName, &AnsiString, TRUE);
+    if (NT_SUCCESS(Status))
+    {
+        if (Face->style_name[0] && strcmp(Face->style_name, "Regular"))
+        {
+            RtlInitAnsiString(&AnsiString, Face->style_name);
+            Status = RtlAnsiStringToUnicodeString(&Entry->StyleName, &AnsiString, TRUE);
+            if (!NT_SUCCESS(Status))
+            {
+                RtlFreeUnicodeString(&Entry->FaceName);
+            }
+        }
+        else
+        {
+            RtlInitUnicodeString(&Entry->StyleName, NULL);
+        }
+    }
     if (!NT_SUCCESS(Status))
     {
         if (PrivateEntry)
@@ -1081,15 +1097,25 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
     if (CharSetIndex == -1)
     {
         INT i;
+        USHORT NameLength = Entry->FaceName.Length;
+
+        if (Entry->StyleName.Length)
+            NameLength += Entry->StyleName.Length + sizeof(WCHAR);
 
         if (pLoadFont->RegValueName.Length == 0)
         {
-            RtlCreateUnicodeString(pValueName, Entry->FaceName.Buffer);
+            pValueName->Length = 0;
+            pValueName->MaximumLength = NameLength + sizeof(WCHAR);
+            pValueName->Buffer = ExAllocatePoolWithTag(PagedPool,
+                                                       pValueName->MaximumLength,
+                                                       TAG_USTR);
+            pValueName->Buffer[0] = UNICODE_NULL;
+            RtlAppendUnicodeStringToString(pValueName, &Entry->FaceName);
         }
         else
         {
             UNICODE_STRING NewString;
-            USHORT Length = pValueName->Length + 3 * sizeof(WCHAR) + Entry->FaceName.Length;
+            USHORT Length = pValueName->Length + 3 * sizeof(WCHAR) + NameLength;
             NewString.Length = 0;
             NewString.MaximumLength = Length + sizeof(WCHAR);
             NewString.Buffer = ExAllocatePoolWithTag(PagedPool,
@@ -1103,6 +1129,11 @@ IntGdiLoadFontsFromMemory(PGDI_LOAD_FONT pLoadFont,
 
             RtlFreeUnicodeString(pValueName);
             *pValueName = NewString;
+        }
+        if (Entry->StyleName.Length)
+        {
+            RtlAppendUnicodeToString(pValueName, L" ");
+            RtlAppendUnicodeStringToString(pValueName, &Entry->StyleName);
         }
 
         for (i = 1; i < CharSetCount; ++i)
@@ -4274,7 +4305,7 @@ GetFontPenalty(const LOGFONTW *               LogFont,
     Byte = (LogFont->lfPitchAndFamily & 0x0F);
     if (Byte == DEFAULT_PITCH)
         Byte = VARIABLE_PITCH;
-    if ((Byte & FIXED_PITCH) || (Byte & MONO_FONT))
+    if (Byte == FIXED_PITCH)
     {
         if (TM->tmPitchAndFamily & _TMPF_VARIABLE_PITCH)
         {
@@ -4284,7 +4315,7 @@ GetFontPenalty(const LOGFONTW *               LogFont,
             Penalty += 15000;
         }
     }
-    if (Byte & VARIABLE_PITCH)
+    if (Byte == VARIABLE_PITCH)
     {
         if (!(TM->tmPitchAndFamily & _TMPF_VARIABLE_PITCH))
         {
@@ -4335,37 +4366,12 @@ GetFontPenalty(const LOGFONTW *               LogFont,
     Byte = (LogFont->lfPitchAndFamily & 0xF0);
     if (Byte != FF_DONTCARE)
     {
-        if (Byte & FF_MODERN)
-        {
-            if (TM->tmPitchAndFamily & _TMPF_VARIABLE_PITCH)
-            {
-                /* FixedPitch Penalty 15000 */
-                /* Requested a fixed pitch font, but the candidate is a
-                   variable pitch font. */
-                Penalty += 15000;
-            }
-        }
-
-        if ((Byte & FF_ROMAN) || (Byte & FF_SWISS))
-        {
-            if (!(TM->tmPitchAndFamily & _TMPF_VARIABLE_PITCH))
-            {
-                /* PitchVariable Penalty 350 */
-                /* Requested a variable pitch font, but the candidate is not a
-                   variable pitch font. */
-                Penalty += 350;
-            }
-        }
-
-#define FF_MASK  (FF_DECORATIVE | FF_SCRIPT | FF_SWISS)
-        if ((Byte & FF_MASK) != (TM->tmPitchAndFamily & FF_MASK))
+        if (Byte != (TM->tmPitchAndFamily & 0xF0))
         {
             /* Family Penalty 9000 */
             /* Requested a family, but the candidate's family is different. */
             Penalty += 9000;
         }
-#undef FF_MASK
-
         if ((TM->tmPitchAndFamily & 0xF0) == FF_DONTCARE)
         {
             /* FamilyUnknown Penalty 8000 */
@@ -4667,6 +4673,53 @@ IntFontType(PFONTGDI Font)
     }
 }
 
+static BOOL
+MatchFontName(PSHARED_FACE SharedFace, LPCWSTR lfFaceName, FT_UShort NameID, FT_UShort LangID)
+{
+    NTSTATUS Status;
+    UNICODE_STRING Name1, Name2;
+
+    if (lfFaceName[0] == UNICODE_NULL)
+        return FALSE;
+
+    RtlInitUnicodeString(&Name1, lfFaceName);
+
+    RtlInitUnicodeString(&Name2, NULL);
+    Status = IntGetFontLocalizedName(&Name2, SharedFace, NameID, LangID);
+
+    if (NT_SUCCESS(Status))
+    {
+        if (RtlCompareUnicodeString(&Name1, &Name2, TRUE) == 0)
+        {
+            RtlFreeUnicodeString(&Name2);
+            return TRUE;
+        }
+
+        RtlFreeUnicodeString(&Name2);
+    }
+
+    return FALSE;
+}
+
+static BOOL
+MatchFontNames(PSHARED_FACE SharedFace, LPCWSTR lfFaceName)
+{
+    if (MatchFontName(SharedFace, lfFaceName, TT_NAME_ID_FONT_FAMILY, LANG_ENGLISH) ||
+        MatchFontName(SharedFace, lfFaceName, TT_NAME_ID_FULL_NAME, LANG_ENGLISH))
+    {
+        return TRUE;
+    }
+    if (PRIMARYLANGID(gusLanguageID) != LANG_ENGLISH)
+    {
+        if (MatchFontName(SharedFace, lfFaceName, TT_NAME_ID_FONT_FAMILY, gusLanguageID) ||
+            MatchFontName(SharedFace, lfFaceName, TT_NAME_ID_FULL_NAME, gusLanguageID))
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 NTSTATUS
 FASTCALL
 TextIntRealizeFont(HFONT FontHandle, PTEXTOBJ pTextObj)
@@ -4731,22 +4784,32 @@ TextIntRealizeFont(HFONT FontHandle, PTEXTOBJ pTextObj)
     }
     else
     {
-        UNICODE_STRING FaceName;
+        UNICODE_STRING Name;
         PFONTGDI FontGdi = ObjToGDI(TextObj->Font, FONT);
+        PSHARED_FACE SharedFace = FontGdi->SharedFace;
 
         IntLockFreeType();
         IntRequestFontSize(NULL, FontGdi, pLogFont->lfWidth, pLogFont->lfHeight);
         IntUnLockFreeType();
 
-        RtlInitUnicodeString(&FaceName, NULL);
-        IntGetFontLocalizedName(&FaceName, FontGdi->SharedFace, TT_NAME_ID_FONT_FAMILY, gusLanguageID);
+        TextObj->TextFace[0] = UNICODE_NULL;
+        if (MatchFontNames(SharedFace, SubstitutedLogFont.lfFaceName))
+        {
+            RtlStringCchCopyW(TextObj->TextFace, _countof(TextObj->TextFace), pLogFont->lfFaceName);
+        }
+        else
+        {
+            RtlInitUnicodeString(&Name, NULL);
+            Status = IntGetFontLocalizedName(&Name, SharedFace, TT_NAME_ID_FONT_FAMILY, gusLanguageID);
+            if (NT_SUCCESS(Status))
+            {
+                /* truncated copy */
+                Name.Length = (USHORT)min(Name.Length, (LF_FACESIZE - 1) * sizeof(WCHAR));
+                RtlStringCbCopyNW(TextObj->TextFace, Name.Length + sizeof(WCHAR), Name.Buffer, Name.Length);
 
-        /* truncated copy */
-        FaceName.Length = (USHORT)min(FaceName.Length, (LF_FACESIZE - 1) * sizeof(WCHAR));
-        FaceName.MaximumLength = (USHORT)(FaceName.Length + sizeof(UNICODE_NULL));
-        RtlCopyMemory(TextObj->FaceName, FaceName.Buffer, FaceName.MaximumLength);
-
-        RtlFreeUnicodeString(&FaceName);
+                RtlFreeUnicodeString(&Name);
+            }
+        }
 
         // Need hdev, when freetype is loaded need to create DEVOBJ for
         // Consumer and Producer.
@@ -4988,15 +5051,10 @@ IntGdiGetFontResourceInfo(
     case 1: /* copy the font title */
         /* calculate the required size */
         Size = 0;
-        Size += wcslen(FamInfo[0].EnumLogFontEx.elfLogFont.lfFaceName);
-        if (FamInfo[0].EnumLogFontEx.elfStyle[0] &&
-            _wcsicmp(FamInfo[0].EnumLogFontEx.elfStyle, L"Regular") != 0)
+        for (i = 0; i < Count; ++i)
         {
-            Size += 1 + wcslen(FamInfo[0].EnumLogFontEx.elfStyle);
-        }
-        for (i = 1; i < Count; ++i)
-        {
-            Size += 3;  /* " & " */
+            if (i > 0)
+                Size += 3;  /* " & " */
             Size += wcslen(FamInfo[i].EnumLogFontEx.elfLogFont.lfFaceName);
             if (FamInfo[i].EnumLogFontEx.elfStyle[0] &&
                 _wcsicmp(FamInfo[i].EnumLogFontEx.elfStyle, L"Regular") != 0)
@@ -5019,10 +5077,10 @@ IntGdiGetFontResourceInfo(
                 /* store font title to buffer */
                 WCHAR *psz = pBuffer;
                 *psz = 0;
-                IntAddNameFromFamInfo(psz, &FamInfo[0]);
-                for (i = 1; i < Count; ++i)
+                for (i = 0; i < Count; ++i)
                 {
-                    wcscat(psz, L" & ");
+                    if (i > 0)
+                        wcscat(psz, L" & ");
                     IntAddNameFromFamInfo(psz, &FamInfo[i]);
                 }
                 psz[wcslen(psz) + 1] = UNICODE_NULL;
